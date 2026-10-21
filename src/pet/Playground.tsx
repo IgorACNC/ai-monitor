@@ -13,15 +13,17 @@ const GRAVITY = 1500; // px/s²
 const BOUNCE = 0.55;
 const WALK_SPEED = 45; // px/s
 const RUN_SPEED = 260;
-const NAP_AFTER_MS = 60_000;
+/** Sem brincadeira por tanto tempo, ele tira um cochilo curto e volta a passear. */
+const NAP_AFTER_MS = 4 * 60_000;
+const NAP_MS: [number, number] = [10_000, 15_000];
 /** Correndo atrás da bolinha, o GIF toca mais rápido que andando. */
 const RUN_ANIMATION_SPEED = 1.6;
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 
 /**
- * Faixa superior onde o bichinho vive. Clicar nela joga a bolinha; sem bolinha,
- * ele passeia de tempos em tempos e, depois de um tempo sem brincadeira, cochila.
+ * Faixa superior onde o bichinho vive. Clicar nela joga a bolinha; sem bolinha, ele passeia
+ * sem parar (os GIFs são ciclos de corrida, parado ficariam congelados) e de vez em quando cochila.
  */
 export function Playground({
   settings,
@@ -48,7 +50,6 @@ export function Playground({
     target: 120,
     ball: null as Ball | null,
     modeUntil: 0,
-    nextWander: performance.now() + rand(2000, 5000),
     lastPlay: performance.now(),
   });
 
@@ -67,6 +68,18 @@ export function Playground({
         s.mode = m;
         setMode(m);
       }
+    };
+    /** Próximo destino, longe o bastante para não virar um passinho no lugar. */
+    const wander = (width: number, margin: number) => {
+      const span = width - 2 * margin;
+      let target = rand(margin, width - margin);
+      if (Math.abs(target - s.x) < span * 0.25) {
+        // Perto demais: vai para o lado oposto da faixa.
+        const offset = rand(0, span * 0.3);
+        target = s.x < width / 2 ? width - margin - offset : margin + offset;
+      }
+      s.target = target;
+      setModeIfChanged("walk");
     };
     const moveToward = (target: number, speed: number, dt: number) => {
       const dx = target - s.x;
@@ -113,23 +126,23 @@ export function Playground({
         }
       } else if (s.mode === "happy" || s.mode === "sleep") {
         if (t >= s.modeUntil) {
-          setModeIfChanged("idle");
           s.lastPlay = t;
-          s.nextWander = t + rand(1500, 4000);
+          if (reducedMotion) setModeIfChanged("idle");
+          else wander(width, margin);
         }
       } else if (s.mode === "walk" || s.mode === "run") {
         if (moveToward(s.target, s.mode === "run" ? RUN_SPEED : WALK_SPEED, dt)) {
-          setModeIfChanged("idle");
-          s.nextWander = t + rand(5000, 15000);
+          if (reducedMotion) {
+            setModeIfChanged("idle");
+          } else if (t - s.lastPlay > NAP_AFTER_MS) {
+            s.modeUntil = t + rand(...NAP_MS);
+            setModeIfChanged("sleep");
+          } else {
+            wander(width, margin);
+          }
         }
       } else if (!reducedMotion) {
-        if (t - s.lastPlay > NAP_AFTER_MS) {
-          s.modeUntil = t + rand(20_000, 40_000);
-          setModeIfChanged("sleep");
-        } else if (t >= s.nextWander) {
-          s.target = rand(margin, width - margin);
-          setModeIfChanged("walk");
-        }
+        wander(width, margin);
       }
 
       if (petRef.current) petRef.current.style.transform = `translateX(${s.x - petWidth / 2}px)`;

@@ -15,6 +15,20 @@
         "title": "AI Monitor",
         "width": 1180,
         "height": 800
+      },
+      {
+        "label": "widget",
+        "title": "AI Monitor: uso",
+        "width": 72,
+        "height": 196,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "focus": false
       }
     ],
     "security": {
@@ -23,7 +37,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

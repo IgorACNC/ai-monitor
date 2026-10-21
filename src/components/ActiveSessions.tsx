@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { baseName, elapsed, fmt, severity } from "../format";
+import { baseName, compact, elapsed, fmt, severity } from "../format";
 import type { LiveSession } from "../types";
 
 const STATUS: Record<string, { label: string; className: string }> = {
@@ -54,7 +54,7 @@ function Detail({ session, now, onEnded }: { session: LiveSession; now: number; 
   const status = statusOf(session);
   const project = session.cwd ? baseName(session.cwd) : session.projectDir;
   const sub = session.subagentTotals.messages;
-  const ctx = session.contextPercent;
+  const ctx = session.context;
 
   return (
     <div className="session-detail" id={`session-${session.pid}`}>
@@ -71,17 +71,22 @@ function Detail({ session, now, onEnded }: { session: LiveSession; now: number; 
       </div>
 
       <dl className="session-facts">
-        <div>
+        <div className="fact-wide">
           <dt>Contexto usado</dt>
           <dd>
             {ctx === null ? (
               <span className="muted-inline">aparece com as porcentagens ativas</span>
             ) : (
-              <span className={`context context-${severity(ctx)}`}>
+              <span className={`context context-${severity(ctx.percent)}`}>
                 <span className="context-bar">
-                  <span style={{ width: `${Math.min(100, ctx)}%` }} />
+                  <span style={{ width: `${Math.min(100, ctx.percent)}%` }} />
                 </span>
-                {Math.round(ctx)}%
+                <span>
+                  {ctx.usedTokens !== null && ctx.windowSize !== null
+                    ? `${compact.format(ctx.usedTokens)} de ${compact.format(ctx.windowSize)} tokens `
+                    : ""}
+                  <span className="muted-inline">({Math.round(ctx.percent)}%)</span>
+                </span>
               </span>
             )}
           </dd>
@@ -140,7 +145,7 @@ export function ActiveSessions({ sessions, now, onChanged }: { sessions: LiveSes
               >
                 <span className={`status-dot ${status.className}`} aria-hidden="true" />
                 <span className="pill-title">{titleOf(s)}</span>
-                {s.contextPercent !== null && <span className="pill-meta">{Math.round(s.contextPercent)}%</span>}
+                {s.context !== null && <span className="pill-meta">{Math.round(s.context.percent)}%</span>}
               </button>
             </li>
           );
