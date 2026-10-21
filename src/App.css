@@ -671,8 +671,28 @@ code {
   padding: 20px 22px;
 }
 
-.commits-card .commits-overview {
+.commits-card .activity {
   border-bottom: 1px solid var(--rule);
+}
+
+.activity-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 14px 22px 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.activity-source strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.commits-empty {
+  padding: 14px 22px;
 }
 
 .contrib {

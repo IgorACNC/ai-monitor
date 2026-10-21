@@ -11,7 +11,8 @@ import { Settings } from "./pages/Settings";
 import { usePetAnimation, usePetLibrary } from "./pet/library";
 import { Playground } from "./pet/Playground";
 import { selectedPet, usePetSettings } from "./pet/settings";
-import type { CaptureStatus, Commit, Limits, LiveSession } from "./types";
+import type { GithubState } from "./components/Commits";
+import type { CaptureStatus, Commit, GithubCalendar, Limits, LiveSession } from "./types";
 
 const TITLES: Record<Page, string> = {
   home: "Visão geral",
@@ -21,8 +22,13 @@ const TITLES: Record<Page, string> = {
 
 /** Status das sessões e porcentagens mudam sem aviso; são lidos a cada poucos segundos. */
 const LIVE_POLL_MS = 3000;
-/** Ler os repositórios chama o git várias vezes, então é bem menos frequente. */
+/**
+ * Commits novos chegam pelo evento `commits-changed`, assim que o git grava a referência.
+ * A releitura periódica só cobre o que o observador não vê (ex.: repositório recém-criado).
+ */
 const COMMITS_POLL_MS = 60_000;
+/** O gráfico do GitHub vem da internet; o próprio GitHub demora para atualizá-lo. */
+const GITHUB_POLL_MS = 10 * 60_000;
 
 function App() {
   const [page, setPage] = useState<Page>("home");
@@ -31,6 +37,9 @@ function App() {
   const [limits, setLimits] = useState<Limits | null>(null);
   const [capture, setCapture] = useState<CaptureStatus | null>(null);
   const [commits, setCommits] = useState<Commit[] | null>(null);
+  const [calendar, setCalendar] = useState<GithubCalendar | null>(null);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [calendarAt, setCalendarAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pet, updatePet] = usePetSettings();
   const petLibrary = usePetLibrary();
@@ -58,16 +67,38 @@ function App() {
       .catch(() => setCommits([]));
   }, []);
 
+  const refreshGithub = useCallback(async () => {
+    try {
+      setCalendar(await invoke<GithubCalendar>("get_github_calendar"));
+      setCalendarAt(Date.now());
+      setCalendarError(null);
+    } catch (e) {
+      // Mantém o último gráfico baixado; só avisa do erro se nunca houve um.
+      setCalendarError(String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshGithub();
+    const id = setInterval(refreshGithub, GITHUB_POLL_MS);
+    return () => clearInterval(id);
+  }, [refreshGithub]);
+
+  const github: GithubState = { calendar, error: calendarError, fetchedAt: calendarAt, refresh: refreshGithub };
+
   useEffect(() => {
     refresh();
     refreshCommits();
     const unlisten = listen("usage-updated", refresh);
+    // Commit, push ou troca de branch num repositório observado: relê na hora.
+    const unlistenCommits = listen("commits-changed", refreshCommits);
     const live = setInterval(refresh, LIVE_POLL_MS);
     const commitsTimer = setInterval(refreshCommits, COMMITS_POLL_MS);
     return () => {
       clearInterval(live);
       clearInterval(commitsTimer);
       unlisten.then((f) => f());
+      unlistenCommits.then((f) => f());
     };
   }, [refresh, refreshCommits]);
 
@@ -109,10 +140,11 @@ function App() {
               sessions={live}
               onSessionsChanged={refresh}
               commits={commits}
+              github={github}
               onSeeCommits={() => setPage("commits")}
             />
           )}
-          {page === "commits" && <CommitsPage commits={commits} now={now} />}
+          {page === "commits" && <CommitsPage commits={commits} github={github} now={now} />}
           {page === "settings" && (
             <Settings
               pet={pet}

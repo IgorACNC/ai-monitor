@@ -1,4 +1,4 @@
-import { CommitRow, CommitStats, ContributionGrid } from "../components/Commits";
+import { Activity, CommitRow, type GithubState } from "../components/Commits";
 import { dayKey } from "../format";
 import type { Commit } from "../types";
 
@@ -15,22 +15,19 @@ function groupByDay(commits: Commit[]) {
   return groups;
 }
 
-export function CommitsPage({ commits, now }: { commits: Commit[] | null; now: number }) {
+export function CommitsPage({ commits, github, now }: { commits: Commit[] | null; github: GithubState; now: number }) {
   if (commits === null) return <p className="empty-line">Lendo os repositórios…</p>;
-  if (commits.length === 0) {
-    return (
-      <p className="empty-line">
-        Nenhum commit seu nos últimos 90 dias. Os commits são lidos dos repositórios onde o Claude Code já trabalhou,
-        filtrados pelo seu nome e e-mail do git.
-      </p>
-    );
-  }
   return (
     <div className="commits-page">
-      <div className="card commits-overview">
-        <ContributionGrid commits={commits} weeks={13} now={now} />
-        <CommitStats commits={commits} now={now} />
+      <div className="card">
+        <Activity commits={commits} github={github} now={now} />
       </div>
+      {commits.length === 0 && (
+        <p className="empty-line">
+          Nenhum commit seu nos últimos 90 dias neste computador. Os commits são lidos dos repositórios onde o Claude
+          Code já trabalhou, filtrados pelo seu nome e e-mail do git.
+        </p>
+      )}
       {groupByDay(commits).map((g) => (
         <section key={g.key} className="commit-day">
           <h2 className="commit-day-title">{g.label}</h2>

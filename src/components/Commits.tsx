@@ -1,21 +1,29 @@
-import { dayKey, elapsed, fmt } from "../format";
-import type { Commit } from "../types";
-import { contributionWeeks, level } from "./contributions";
+import { useState } from "react";
+import { elapsed, fmt } from "../format";
+import type { Commit, GithubCalendar } from "../types";
+import { activityStats, contributionWeeks, countsByDay, level } from "./contributions";
 
 const monthFmt = new Intl.DateTimeFormat("pt-BR", { month: "short" });
 const dayFmt = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" });
 const WEEKDAY_LABELS = ["", "seg", "", "qua", "", "sex", ""];
+const WEEKS = 13;
 
-/** Grade de contribuições no estilo do GitHub. */
-export function ContributionGrid({ commits, weeks, now }: { commits: Commit[]; weeks: number; now: number }) {
-  const columns = contributionWeeks(
-    commits.map((c) => c.ts),
-    now,
-    weeks,
-  );
+/** Grade no estilo do GitHub. `unit` dá nome ao que é contado ("contribuição", "commit"). */
+function ContributionGrid({
+  counts,
+  now,
+  unit,
+}: {
+  counts: Map<string, number>;
+  now: number;
+  unit: [string, string];
+}) {
+  const columns = contributionWeeks(counts, now, WEEKS);
   const max = Math.max(0, ...columns.flat().map((d) => d.count));
+  const total = columns.flat().reduce((sum, d) => sum + d.count, 0);
+  const label = (n: number) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
   return (
-    <div className="contrib" role="img" aria-label={`${commits.length} commits nas últimas ${weeks} semanas`}>
+    <div className="contrib" role="img" aria-label={`${label(total)} nas últimas ${WEEKS} semanas`}>
       <div className="contrib-weekdays" aria-hidden="true">
         {WEEKDAY_LABELS.map((l, i) => (
           <span key={i}>{l}</span>
@@ -36,12 +44,84 @@ export function ContributionGrid({ commits, weeks, now }: { commits: Commit[]; w
                 <span
                   key={d.key}
                   className={`contrib-day level-${d.future ? "none" : level(d.count, max)}`}
-                  title={d.future ? undefined : `${d.count} ${d.count === 1 ? "commit" : "commits"} em ${dayFmt.format(d.date)}`}
+                  title={d.future ? undefined : `${label(d.count)} em ${dayFmt.format(d.date)}`}
                 />
               ))}
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+export type GithubState = {
+  calendar: GithubCalendar | null;
+  error: string | null;
+  /** Quando o gráfico foi baixado pela última vez. */
+  fetchedAt: number | null;
+  refresh: () => Promise<void>;
+};
+
+function GithubSource({ github, now }: { github: GithubState; now: number }) {
+  const [busy, setBusy] = useState(false);
+  async function refresh() {
+    setBusy(true);
+    await github.refresh();
+    setBusy(false);
+  }
+  return (
+    <div className="activity-source">
+      {github.calendar ? (
+        <span>
+          Gráfico do GitHub de <strong>{github.calendar.login}</strong>
+          {github.fetchedAt && <>, atualizado {elapsed(github.fetchedAt, now)}</>}
+        </span>
+      ) : (
+        <span>
+          Mostrando os commits deste computador.
+          {github.error && <> Gráfico do GitHub indisponível: {github.error}</>}
+        </span>
+      )}
+      <button className="link-button" onClick={refresh} disabled={busy}>
+        {busy ? "Atualizando…" : "Atualizar"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Grade e números de atividade. Usa o gráfico do GitHub (igual ao do perfil) quando ele
+ * está disponível; senão, os commits lidos dos repositórios do computador.
+ */
+export function Activity({ commits, github, now }: { commits: Commit[]; github: GithubState; now: number }) {
+  const fromGithub = github.calendar !== null;
+  const counts = fromGithub
+    ? new Map(github.calendar!.days.map((d) => [d.date, d.count]))
+    : countsByDay(commits.map((c) => c.ts));
+  const unit: [string, string] = fromGithub ? ["contribuição", "contribuições"] : ["commit", "commits"];
+  const { last7, streak } = activityStats(counts, now);
+  const unpushed = commits.filter((c) => c.pushed === false).length;
+
+  return (
+    <div className="activity">
+      <GithubSource github={github} now={now} />
+      <div className="commits-overview">
+        <ContributionGrid counts={counts} now={now} unit={unit} />
+        <dl className="commit-stats">
+          <div>
+            <dt>Últimos 7 dias</dt>
+            <dd>{fmt.format(last7)}</dd>
+          </div>
+          <div>
+            <dt>Dias seguidos</dt>
+            <dd>{fmt.format(streak)}</dd>
+          </div>
+          <div>
+            <dt>Não enviados</dt>
+            <dd className={unpushed > 0 ? "stat-attention" : undefined}>{fmt.format(unpushed)}</dd>
+          </div>
+        </dl>
       </div>
     </div>
   );
@@ -63,44 +143,5 @@ export function CommitRow({ commit, now }: { commit: Commit; now: number }) {
         <PushState pushed={commit.pushed} />
       </span>
     </li>
-  );
-}
-
-/** Números rápidos: commits na semana, dias seguidos com commit e quantos faltam enviar. */
-export function commitStats(commits: Commit[], now: number) {
-  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
-  const days = new Set(commits.map((c) => dayKey(c.ts)));
-  let streak = 0;
-  const d = new Date(now);
-  // Se hoje ainda não teve commit, a sequência conta a partir de ontem.
-  if (!days.has(dayKey(d.getTime()))) d.setDate(d.getDate() - 1);
-  while (days.has(dayKey(d.getTime()))) {
-    streak++;
-    d.setDate(d.getDate() - 1);
-  }
-  return {
-    thisWeek: commits.filter((c) => c.ts >= weekAgo).length,
-    streak,
-    unpushed: commits.filter((c) => c.pushed === false).length,
-  };
-}
-
-export function CommitStats({ commits, now }: { commits: Commit[]; now: number }) {
-  const s = commitStats(commits, now);
-  return (
-    <dl className="commit-stats">
-      <div>
-        <dt>Últimos 7 dias</dt>
-        <dd>{fmt.format(s.thisWeek)}</dd>
-      </div>
-      <div>
-        <dt>Dias seguidos</dt>
-        <dd>{fmt.format(s.streak)}</dd>
-      </div>
-      <div>
-        <dt>Não enviados</dt>
-        <dd className={s.unpushed > 0 ? "stat-attention" : undefined}>{fmt.format(s.unpushed)}</dd>
-      </div>
-    </dl>
   );
 }

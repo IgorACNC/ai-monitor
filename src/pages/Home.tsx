@@ -1,5 +1,5 @@
 import { ActiveSessions } from "../components/ActiveSessions";
-import { CommitRow, CommitStats, ContributionGrid } from "../components/Commits";
+import { Activity, CommitRow, type GithubState } from "../components/Commits";
 import { Limits } from "../components/Limits";
 import type { CaptureStatus, Commit, Limits as LimitsData, LiveSession } from "../types";
 
@@ -13,6 +13,7 @@ export function Home({
   sessions,
   onSessionsChanged,
   commits,
+  github,
   onSeeCommits,
 }: {
   now: number;
@@ -22,6 +23,7 @@ export function Home({
   sessions: LiveSession[];
   onSessionsChanged: () => void;
   commits: Commit[] | null;
+  github: GithubState;
   onSeeCommits: () => void;
 }) {
   return (
@@ -49,21 +51,20 @@ export function Home({
         </div>
         {commits === null ? (
           <p className="empty-line">Lendo os repositórios…</p>
-        ) : commits.length === 0 ? (
-          <p className="empty-line">
-            Nenhum commit seu nos últimos 90 dias nas pastas onde o Claude Code trabalhou.
-          </p>
         ) : (
           <div className="card commits-card">
-            <div className="commits-overview">
-              <ContributionGrid commits={commits} weeks={13} now={now} />
-              <CommitStats commits={commits} now={now} />
-            </div>
-            <ul className="commit-list">
-              {commits.slice(0, RECENT_COMMITS).map((c) => (
-                <CommitRow key={c.sha} commit={c} now={now} />
-              ))}
-            </ul>
+            <Activity commits={commits} github={github} now={now} />
+            {commits.length === 0 ? (
+              <p className="empty-line commits-empty">
+                Nenhum commit seu nos últimos 90 dias nas pastas onde o Claude Code trabalhou.
+              </p>
+            ) : (
+              <ul className="commit-list">
+                {commits.slice(0, RECENT_COMMITS).map((c) => (
+                  <CommitRow key={c.sha} commit={c} now={now} />
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </section>

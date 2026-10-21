@@ -1,5 +1,7 @@
+mod commit_watch;
 mod commits;
 mod db;
+mod github;
 mod indexer;
 mod live;
 mod parser;
@@ -100,7 +102,7 @@ const COMMIT_DAYS: u32 = 90;
 
 /// Roda `git` várias vezes; fica fora da thread principal para não travar a janela.
 #[tauri::command]
-async fn get_commits(state: State<'_, AppState>) -> Result<Vec<commits::Commit>, String> {
+async fn get_commits(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<commits::Commit>, String> {
     let dirs: Vec<PathBuf> = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         db::session_dirs(&conn)
@@ -109,9 +111,23 @@ async fn get_commits(state: State<'_, AppState>) -> Result<Vec<commits::Commit>,
             .map(PathBuf::from)
             .collect()
     };
-    tauri::async_runtime::spawn_blocking(move || commits::collect(&dirs, COMMIT_DAYS))
+    tauri::async_runtime::spawn_blocking(move || {
+        // Repositórios novos (de sessões novas) passam a ser observados também.
+        if let Some(watcher) = app.try_state::<commit_watch::CommitWatcher>() {
+            watcher.watch(&commits::git_dirs(&dirs));
+        }
+        commits::collect(&dirs, COMMIT_DAYS)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Consulta a internet pelo `gh`; fica fora da thread principal para não travar a janela.
+#[tauri::command]
+async fn get_github_calendar() -> Result<github::Calendar, String> {
+    tauri::async_runtime::spawn_blocking(github::fetch_calendar)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -265,6 +281,15 @@ pub fn run() {
                 }
             }
             app.manage(widget::WidgetState::load(&data_dir));
+            let handle = app.handle().clone();
+            match commit_watch::CommitWatcher::new(move || {
+                let _ = handle.emit("commits-changed", ());
+            }) {
+                Ok(watcher) => {
+                    app.manage(watcher);
+                }
+                Err(e) => eprintln!("não foi possível observar os repositórios: {e}"),
+            }
             app.manage(AppState {
                 conn,
                 claude_dir,
@@ -297,6 +322,7 @@ pub fn run() {
             get_capture_status,
             set_capture,
             get_commits,
+            get_github_calendar,
             kill_session,
             show_main,
             get_widget_enabled,
