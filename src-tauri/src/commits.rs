@@ -41,6 +41,19 @@ fn repo_root(dir: &Path) -> Option<PathBuf> {
     git(dir, &["rev-parse", "--show-toplevel"]).map(|s| PathBuf::from(s.trim()))
 }
 
+/// Pastas `.git` (compartilhadas entre worktrees) dos repositórios que contêm as pastas dadas.
+pub fn git_dirs(dirs: &[PathBuf]) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = dirs
+        .iter()
+        .filter(|d| d.is_dir())
+        .filter_map(|d| git(d, &["rev-parse", "--path-format=absolute", "--git-common-dir"]))
+        .map(|s| PathBuf::from(s.trim()))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
 const SEP: char = '\u{1f}';
 
 /// Commit lido do repositório, ainda com o autor, antes de saber se é do usuário.

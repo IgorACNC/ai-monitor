@@ -43,3 +43,10 @@ export type Commit = {
   /** `null` quando o repositório não tem remoto. */
   pushed: boolean | null;
 };
+
+/** Gráfico de contribuições do perfil no GitHub. */
+export type GithubCalendar = {
+  login: string;
+  total: number;
+  days: { date: string; count: number }[];
+};

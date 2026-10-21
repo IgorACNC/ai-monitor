@@ -51,11 +51,17 @@ CREATE TABLE IF NOT EXISTS files (
     path   TEXT PRIMARY KEY,
     offset INTEGER NOT NULL
 );
+
+-- Toda pasta em que o Claude Code trabalhou. Uma sessão pode passar por várias
+-- (ex.: começa numa worktree e segue em outra pasta), por isso não basta sessions.cwd.
+CREATE TABLE IF NOT EXISTS dirs (
+    cwd TEXT PRIMARY KEY
+);
 ";
 
 /// Versão do esquema. Ao subir, os `.jsonl` são relidos do início para preencher
 /// colunas novas (a gravação é idempotente, então nada é contado duas vezes).
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -78,6 +84,9 @@ fn init(conn: &Connection) -> rusqlite::Result<()> {
                  ALTER TABLE sessions ADD COLUMN last_prompt_ts INTEGER;",
             )?;
         }
+    }
+    if version < SCHEMA_VERSION {
+        // v1: último prompt; v2: tabela `dirs`. Ambas são preenchidas relendo os `.jsonl`.
         conn.execute("DELETE FROM files", [])?;
     }
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -121,6 +130,7 @@ pub fn apply_event(conn: &Connection, project_dir: &str, event: &Event) -> rusql
                  WHERE session_id = ?1",
                 params![session_id, ts, text, cwd],
             )?;
+            record_dir(conn, cwd.as_deref())?;
             touch_session(conn, session_id, *ts)
         }
     }
@@ -162,7 +172,15 @@ fn apply_usage(conn: &Connection, project_dir: &str, u: &UsageRecord) -> rusqlit
         "UPDATE sessions SET cwd = COALESCE(cwd, ?2), git_branch = COALESCE(?3, git_branch) WHERE session_id = ?1",
         params![u.session_id, u.cwd, u.git_branch],
     )?;
+    record_dir(conn, u.cwd.as_deref())?;
     touch_session(conn, &u.session_id, u.ts)
+}
+
+fn record_dir(conn: &Connection, cwd: Option<&str>) -> rusqlite::Result<()> {
+    if let Some(cwd) = cwd.filter(|c| !c.is_empty()) {
+        conn.execute("INSERT OR IGNORE INTO dirs VALUES (?1)", [cwd])?;
+    }
+    Ok(())
 }
 
 fn ensure_session(conn: &Connection, session_id: &str, project_dir: &str) -> rusqlite::Result<()> {
@@ -241,7 +259,7 @@ pub fn totals_between(
 
 /// Pastas em que o Claude Code já trabalhou.
 pub fn session_dirs(conn: &Connection) -> rusqlite::Result<Vec<String>> {
-    conn.prepare("SELECT DISTINCT cwd FROM sessions WHERE cwd IS NOT NULL")?
+    conn.prepare("SELECT cwd FROM dirs")?
         .query_map([], |r| r.get(0))?
         .collect()
 }
@@ -511,6 +529,29 @@ mod tests {
             session_detail(&mem(), "nada").unwrap(),
             SessionDetail::default()
         );
+    }
+
+    #[test]
+    fn session_dirs_include_every_folder_a_session_moved_through() {
+        let conn = mem();
+        let usage = |msg: &str, cwd: &str| {
+            Event::Usage(UsageRecord {
+                session_id: "s1".into(),
+                message_id: msg.into(),
+                request_id: "r".into(),
+                cwd: Some(cwd.into()),
+                ..Default::default()
+            })
+        };
+        // A sessão começa numa worktree e depois passa a trabalhar em outra pasta.
+        apply_event(&conn, "p", &usage("a", "C:/worktree")).unwrap();
+        apply_event(&conn, "p", &usage("b", "A:/projeto")).unwrap();
+        let prompt = Event::UserPrompt { session_id: "s2".into(), ts: 1, text: "x".into(), cwd: Some("A:/outro".into()) };
+        apply_event(&conn, "p", &prompt).unwrap();
+
+        let mut dirs = session_dirs(&conn).unwrap();
+        dirs.sort();
+        assert_eq!(dirs, vec!["A:/outro", "A:/projeto", "C:/worktree"]);
     }
 
     #[test]

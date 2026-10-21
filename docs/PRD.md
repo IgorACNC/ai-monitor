@@ -46,7 +46,9 @@ A interface mostra **porcentagens, não tokens** (decisão do usuário em 2026-1
 4. **Sessões ativas**: um painel por console do Claude Code aberto agora, lido de `~/.claude/sessions/<pid>.json` (com verificação de que o processo ainda existe, pelo horário de início, para não confundir PIDs reaproveitados). Cada painel mostra status ao vivo (trabalhando / aguardando você), tempo aberto, projeto, branch, modelo, tamanho do contexto atual, tokens por tipo (incluindo subagentes), número de respostas, ferramentas mais usadas e o último prompt. Ação: **encerrar** o console, com confirmação. Trazer a janela do terminal para frente está fora do escopo.
 5. **Commits**:
    - **Commits locais**: `git log` (90 dias, branches locais) dos repositórios onde o Claude Code já trabalhou (pastas conhecidas pelas sessões) + pastas adicionadas manualmente (pendente). São "do usuário" os commits com os e-mails configurados no git e com os e-mails usados em commits assinados com o nome configurado (cobre e-mails antigos). Mostra mensagem, repositório, branch, data e se já foi enviado (push), agrupados por dia.
-   - **Atividade do GitHub** (opcional, exceção ao 100% local, ligada nas configurações): feed de eventos da conta via `gh` já autenticado (sem guardar token); fallback: atividade pública por nome de usuário.
+   - **Gráfico de contribuições**: o mesmo do perfil do GitHub, lido via `gh api graphql` (o `gh` já autenticado; o app não guarda token). Atualiza ao abrir, a cada 10 min e no botão "Atualizar". Exceção consciente ao "100% local". Sem `gh`, a grade usa os commits locais e avisa. Os commits locais e o gráfico do GitHub contam coisas diferentes (o GitHub inclui merges, PRs e atividade de outros computadores; os locais incluem commits ainda não enviados).
+   - Commits locais são relidos ~1 s após commit, push ou troca de branch (observador nas pastas `.git`), além da releitura a cada 60 s.
+   - **Feed de eventos** (PRs, issues, reviews): ainda não implementado.
 6. **Configurações**: bichinho, GitHub, pastas, perfis, alertas, idioma, inicialização com o Windows, statusline, oferta (com botão e explicação) de aumentar `cleanupPeriodDays`.
 
 ## Perfis
