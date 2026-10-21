@@ -16,7 +16,9 @@ fn file_for(dir: &Path, name: &str) -> Result<PathBuf, String> {
 }
 
 pub fn list(dir: &Path) -> Vec<String> {
-    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
     let mut names: Vec<String> = entries
         .flatten()
         .map(|e| e.path())
@@ -33,14 +35,24 @@ pub fn read(dir: &Path, name: &str) -> Result<Vec<u8>, String> {
 
 /// Copia o GIF para a pasta do app e devolve o nome com que ficou salvo.
 pub fn add(dir: &Path, source: &Path) -> Result<String, String> {
-    let bytes = std::fs::read(source).map_err(|e| format!("Não foi possível abrir o arquivo: {e}"))?;
+    let bytes =
+        std::fs::read(source).map_err(|e| format!("Não foi possível abrir o arquivo: {e}"))?;
     if !bytes.starts_with(b"GIF8") {
         return Err("Esse arquivo não é um GIF.".into());
     }
-    let stem = source.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let stem = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
     let base: String = stem
         .chars()
-        .map(|c| if c.is_alphanumeric() || " -_".contains(c) { c } else { ' ' })
+        .map(|c| {
+            if c.is_alphanumeric() || " -_".contains(c) {
+                c
+            } else {
+                ' '
+            }
+        })
         .collect::<String>()
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -48,7 +60,11 @@ pub fn add(dir: &Path, source: &Path) -> Result<String, String> {
         .chars()
         .take(40)
         .collect();
-    let base = if base.is_empty() { "Bichinho".to_string() } else { base };
+    let base = if base.is_empty() {
+        "Bichinho".to_string()
+    } else {
+        base
+    };
 
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let mut name = base.clone();
@@ -57,12 +73,14 @@ pub fn add(dir: &Path, source: &Path) -> Result<String, String> {
         name = format!("{base} {n}");
         n += 1;
     }
-    std::fs::write(file_for(dir, &name)?, bytes).map_err(|e| format!("Não foi possível salvar o GIF: {e}"))?;
+    std::fs::write(file_for(dir, &name)?, bytes)
+        .map_err(|e| format!("Não foi possível salvar o GIF: {e}"))?;
     Ok(name)
 }
 
 pub fn remove(dir: &Path, name: &str) -> Result<(), String> {
-    std::fs::remove_file(file_for(dir, name)?).map_err(|e| format!("Não foi possível remover {name}: {e}"))
+    std::fs::remove_file(file_for(dir, name)?)
+        .map_err(|e| format!("Não foi possível remover {name}: {e}"))
 }
 
 #[cfg(test)]

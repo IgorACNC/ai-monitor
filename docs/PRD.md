@@ -37,7 +37,7 @@ A interface mostra **porcentagens, não tokens** (decisão do usuário em 2026-1
 
 1. **Visão geral**:
    - **Limites de uso**: anéis com a % da sessão de 5 h, da semana (e de Opus/Sonnet na semana, quando o Claude Code informa) e quando cada um reinicia. Sem a captura ligada, mostra o convite para ativá-la.
-   - **Sessões ativas**: pílulas compactas (status, título, % de contexto), como os tópicos da página inicial do GitHub; clicar abre os detalhes (status, tempo aberta, contexto usado, projeto, branch, modelo, respostas) e o botão de encerrar.
+   - **Sessões ativas**: pílulas compactas (status, título, % de contexto), como os tópicos da página inicial do GitHub; clicar abre os detalhes (status, tempo aberta, contexto usado como "X de Y tokens (Z%)" com o tamanho da janela do modelo, projeto, branch, modelo, respostas) e o botão de encerrar.
    - **Seus commits**: grade de contribuições de 13 semanas, números rápidos (últimos 7 dias, dias seguidos, não enviados) e os 5 commits mais recentes.
 2. **Uso**: gráficos e tabelas filtráveis por projeto, modelo, ferramentas e skills (classificação determinística, sem IA).
 3. **Histórico de sessões**: lista de chats (título/primeiro prompt, projeto, data, duração, tokens, custo), busca, visualizador somente leitura e botão **Retomar** (abre o Windows Terminal, com fallback para PowerShell, na pasta do projeto executando `claude --resume <id>`).
@@ -67,11 +67,20 @@ A interface mostra **porcentagens, não tokens** (decisão do usuário em 2026-1
 - Notificações nativas do Windows ao cruzar 75% e 90% (configuráveis, ligadas por padrão) e quando a janela de 5h reseta.
 - Inicia com o Windows, minimizado na bandeja (desativável). Fechar a janela apenas a esconde.
 
+## Barrinha de uso (opcional)
+
+- Ligada em Configurações (desligada por padrão; preferência salva em `ui.json` na pasta de dados do app).
+- Ao minimizar ou fechar a janela principal, aparece uma janela pequena, sem bordas e sempre visível, na borda direita da tela, com a % da sessão de 5 h e da semana. Pode ser arrastada; o botão dela reabre o app. Some quando a janela principal volta.
+
+## Uma cópia só
+
+- Abrir o app de novo (atalho, menu Iniciar) com ele já rodando apenas traz a janela existente de volta, em vez de iniciar uma segunda cópia.
+
 ## Bichinho
 
 - Desenhado no próprio app (SVG), sem imagens externas. Personalizável: espécie (gato, cachorro, raposa, pato), cor e nome. Pode ser desligado.
 - Clicar na faixa superior joga uma bolinha (com quique); o bichinho corre até ela e a pega.
-- Sem bolinha: a cada 5–15 s anda até um ponto aleatório e às vezes senta; após ~1 min sem interação, cochila por 20–40 s.
+- Sem bolinha: passeia sem parar, de um ponto a outro da faixa (os GIFs são ciclos de corrida; parado, o GIF ficaria congelado). Após 4 min sem brincadeira, cochila por 10–15 s.
 - Com "reduzir movimento" do Windows ligado, ele só se move quando a bolinha é jogada.
 
 ## Idioma

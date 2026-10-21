@@ -1,4 +1,5 @@
 export const fmt = new Intl.NumberFormat("pt-BR");
+export const compact = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;

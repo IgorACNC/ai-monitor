@@ -5,6 +5,7 @@ mod live;
 mod parser;
 mod pets;
 pub mod statusline;
+mod widget;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -31,8 +32,8 @@ struct LiveSession {
     entry: live::LiveEntry,
     #[serde(flatten)]
     detail: db::SessionDetail,
-    /// Do contexto da sessão, segundo a última statusline dela (precisa da captura ativa).
-    context_percent: Option<f64>,
+    /// Contexto da sessão, segundo a última statusline dela (precisa da captura ativa).
+    context: Option<statusline::ContextUsage>,
 }
 
 #[tauri::command]
@@ -46,8 +47,12 @@ fn get_live_sessions(state: State<AppState>) -> Result<Vec<LiveSession>, String>
         .into_iter()
         .map(|entry| {
             let detail = db::session_detail(&conn, &entry.session_id).map_err(|e| e.to_string())?;
-            let context_percent = statusline::read_context_percent(&state.data_dir, &entry.session_id);
-            Ok(LiveSession { entry, detail, context_percent })
+            let context = statusline::read_context(&state.data_dir, &entry.session_id);
+            Ok(LiveSession {
+                entry,
+                detail,
+                context,
+            })
         })
         .collect()
 }
@@ -67,7 +72,10 @@ fn get_limits(state: State<AppState>) -> Option<statusline::Limits> {
 }
 
 fn settings_path(state: &AppState) -> Result<PathBuf, String> {
-    let dir = state.claude_dir.as_ref().ok_or("Pasta do Claude Code não encontrada.")?;
+    let dir = state
+        .claude_dir
+        .as_ref()
+        .ok_or("Pasta do Claude Code não encontrada.")?;
     Ok(dir.join("settings.json"))
 }
 
@@ -95,7 +103,11 @@ const COMMIT_DAYS: u32 = 90;
 async fn get_commits(state: State<'_, AppState>) -> Result<Vec<commits::Commit>, String> {
     let dirs: Vec<PathBuf> = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        db::session_dirs(&conn).map_err(|e| e.to_string())?.into_iter().map(PathBuf::from).collect()
+        db::session_dirs(&conn)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(PathBuf::from)
+            .collect()
     };
     tauri::async_runtime::spawn_blocking(move || commits::collect(&dirs, COMMIT_DAYS))
         .await
@@ -176,6 +188,24 @@ fn show_main_window(app: &AppHandle) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
+    widget::sync(app);
+}
+
+#[tauri::command]
+fn show_main(app: AppHandle) {
+    show_main_window(&app);
+}
+
+#[tauri::command]
+fn get_widget_enabled(state: State<widget::WidgetState>) -> bool {
+    state.enabled()
+}
+
+#[tauri::command]
+fn set_widget_enabled(app: AppHandle, state: State<widget::WidgetState>, enabled: bool) -> Result<(), String> {
+    state.set_enabled(enabled)?;
+    widget::sync(&app);
+    Ok(())
 }
 
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -209,6 +239,8 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Abrir o app de novo (pelo atalho, por exemplo) só traz de volta a janela já aberta.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -224,6 +256,15 @@ pub fn run() {
             if let Some(dir) = &projects_dir {
                 start_indexing(app.handle().clone(), conn.clone(), dir.clone());
             }
+            // O app instalado assume a captura das porcentagens, mesmo que ela tenha sido
+            // ligada pela versão de desenvolvimento (cuja pasta pode ser apagada).
+            #[cfg(not(debug_assertions))]
+            if let (Some(dir), Ok(exe)) = (&claude_dir, std::env::current_exe()) {
+                if let Err(e) = statusline::repoint(&dir.join("settings.json"), &data_dir, &exe) {
+                    eprintln!("não foi possível atualizar a statusline: {e}");
+                }
+            }
+            app.manage(widget::WidgetState::load(&data_dir));
             app.manage(AppState {
                 conn,
                 claude_dir,
@@ -235,10 +276,19 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Fechar a janela só a esconde: o monitoramento continua na bandeja.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            if window.label() != "main" {
+                return;
+            }
+            match event {
+                // Fechar a janela só a esconde: o monitoramento continua na bandeja.
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    widget::sync(window.app_handle());
+                }
+                // Minimizar e restaurar chegam como mudança de tamanho.
+                WindowEvent::Resized(_) | WindowEvent::Focused(true) => widget::sync(window.app_handle()),
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -248,6 +298,9 @@ pub fn run() {
             set_capture,
             get_commits,
             kill_session,
+            show_main,
+            get_widget_enabled,
+            set_widget_enabled,
             list_pets,
             read_pet,
             add_pet,

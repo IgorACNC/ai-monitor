@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { forgetPet, usePetAnimation } from "../pet/library";
@@ -80,6 +80,49 @@ function CaptureSection({
   );
 }
 
+function WidgetSection() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<boolean>("get_widget_enabled")
+      .then(setEnabled)
+      .catch((e) => setError(String(e)));
+  }, []);
+
+  async function toggle(next: boolean) {
+    setError(null);
+    try {
+      await invoke("set_widget_enabled", { enabled: next });
+      setEnabled(next);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  return (
+    <section className="settings-section">
+      <div className="settings-intro">
+        <h2>Barrinha de uso</h2>
+        <p>
+          Ao minimizar ou fechar a janela, uma barrinha fica na lateral da tela com a porcentagem usada da sessão de 5
+          horas e da semana. Dá para arrastá-la para outro lugar, e o botão dela reabre o app.
+        </p>
+      </div>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={enabled ?? false}
+          disabled={enabled === null}
+          onChange={(e) => toggle(e.target.checked)}
+        />
+        <span>Mostrar a barrinha quando o app estiver minimizado</span>
+      </label>
+      {error && <p className="inline-error">{error}</p>}
+    </section>
+  );
+}
+
 export function Settings({
   pet,
   onPetChange,
@@ -123,6 +166,7 @@ export function Settings({
   return (
     <div className="settings">
       <CaptureSection capture={capture} onChange={onCaptureChange} />
+      <WidgetSection />
       <section className="settings-section">
         <div className="settings-intro">
           <h2>Bichinho</h2>

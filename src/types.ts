@@ -12,8 +12,15 @@ export type LiveSession = {
   model: string | null;
   totals: { messages: number };
   subagentTotals: { messages: number };
-  /** Do contexto ocupado, pela última statusline; `null` sem a captura ativa. */
-  contextPercent: number | null;
+  /** Contexto ocupado, pela última statusline; `null` sem a captura ativa. */
+  context: ContextUsage | null;
+};
+
+export type ContextUsage = {
+  percent: number;
+  usedTokens: number | null;
+  /** Tamanho da janela de contexto do modelo. */
+  windowSize: number | null;
 };
 
 export type LimitWindow = {

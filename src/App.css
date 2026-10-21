@@ -591,6 +591,10 @@ code {
   font-size: 14px;
 }
 
+.session-facts .fact-wide {
+  grid-column: span 2;
+}
+
 .session-facts dt {
   margin-bottom: 2px;
   color: var(--ink-soft);
