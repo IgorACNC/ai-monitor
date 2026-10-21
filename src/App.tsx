@@ -12,7 +12,7 @@ import { usePetAnimation, usePetLibrary } from "./pet/library";
 import { Playground } from "./pet/Playground";
 import { selectedPet, usePetSettings } from "./pet/settings";
 import type { GithubState } from "./components/Commits";
-import type { CaptureStatus, Commit, GithubCalendar, Limits, LiveSession } from "./types";
+import type { AccountStatus, CaptureStatus, Commit, GithubCalendar, Limits, LiveSession } from "./types";
 
 const TITLES: Record<Page, string> = {
   home: "Visão geral",
@@ -36,6 +36,7 @@ function App() {
   const [live, setLive] = useState<LiveSession[]>([]);
   const [limits, setLimits] = useState<Limits | null>(null);
   const [capture, setCapture] = useState<CaptureStatus | null>(null);
+  const [account, setAccount] = useState<AccountStatus | null>(null);
   const [commits, setCommits] = useState<Commit[] | null>(null);
   const [calendar, setCalendar] = useState<GithubCalendar | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
@@ -50,11 +51,13 @@ function App() {
       invoke<LiveSession[]>("get_live_sessions"),
       invoke<Limits | null>("get_limits"),
       invoke<CaptureStatus>("get_capture_status"),
+      invoke<AccountStatus>("get_account_usage"),
     ])
-      .then(([l, lim, cap]) => {
+      .then(([l, lim, cap, acc]) => {
         setLive(l);
         setLimits(lim);
         setCapture(cap);
+        setAccount(acc);
         setNow(Date.now());
         setError(null);
       })
@@ -136,6 +139,7 @@ function App() {
               now={now}
               limits={limits}
               capture={capture}
+              account={account}
               onEnableCapture={() => setCaptureEnabled(true)}
               sessions={live}
               onSessionsChanged={refresh}
@@ -152,6 +156,11 @@ function App() {
               library={petLibrary}
               capture={capture}
               onCaptureChange={setCaptureEnabled}
+              account={account}
+              onAccountChange={async (enabled) => {
+                setAccount(await invoke<AccountStatus>("set_account_usage", { enabled }));
+                refresh();
+              }}
             />
           )}
         </main>

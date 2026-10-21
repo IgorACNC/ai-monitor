@@ -50,3 +50,12 @@ export type GithubCalendar = {
   total: number;
   days: { date: string; count: number }[];
 };
+
+/** Uso da conta consultado direto na Anthropic (inclui navegador e app do Claude). */
+export type AccountStatus = {
+  enabled: boolean;
+  /** Parte do uso da semana que veio de cada produto. */
+  breakdown: { key: string; label: string; percent: number }[];
+  fetchedAt: number | null;
+  error: string | null;
+};

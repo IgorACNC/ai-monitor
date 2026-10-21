@@ -440,6 +440,72 @@ code {
   font-size: 13px;
 }
 
+.breakdown {
+  margin-top: 14px;
+  padding: 14px 18px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.breakdown-title {
+  margin: 0 0 10px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.breakdown-bar {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.breakdown-bar > span {
+  flex-basis: 0;
+  min-width: 3px;
+}
+
+.breakdown-bar > span + span {
+  border-left: 2px solid var(--surface);
+}
+
+.breakdown-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 10px 0 0;
+  padding: 0;
+  font-size: 13px;
+  list-style: none;
+}
+
+.breakdown-legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-soft);
+}
+
+.breakdown-legend strong {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+
+.product-code { background: var(--accent); }
+.product-chat { background: #6fa8dc; }
+.product-cowork { background: var(--warn); }
+.product-other { background: var(--ink-faint); }
+
 .limits-setup {
   display: flex;
   align-items: flex-end;

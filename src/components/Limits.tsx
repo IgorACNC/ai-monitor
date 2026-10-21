@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { elapsed, resetsIn, severity } from "../format";
-import type { CaptureStatus, LimitWindow, Limits as LimitsData } from "../types";
+import type { AccountStatus, CaptureStatus, LimitWindow, Limits as LimitsData } from "../types";
 
 const RADIUS = 34;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
@@ -41,14 +41,59 @@ function LimitCard({ w, now }: { w: LimitWindow; now: number }) {
   );
 }
 
+const PRODUCT_CLASS: Record<string, string> = { claude_code: "product-code", chat: "product-chat", cowork: "product-cowork" };
+
+/** Barra com a parte do uso da semana que veio de cada produto (Claude Code, navegador...). */
+function Breakdown({ account }: { account: AccountStatus }) {
+  if (account.breakdown.length === 0) return null;
+  return (
+    <div className="breakdown">
+      <p className="breakdown-title">Uso da semana por produto</p>
+      <div className="breakdown-bar" aria-hidden="true">
+        {account.breakdown.map((p) => (
+          <span key={p.key} className={PRODUCT_CLASS[p.key] ?? "product-other"} style={{ flexGrow: p.percent }} />
+        ))}
+      </div>
+      <ul className="breakdown-legend">
+        {account.breakdown.map((p) => (
+          <li key={p.key}>
+            <span className={`swatch ${PRODUCT_CLASS[p.key] ?? "product-other"}`} />
+            {p.label}
+            <strong>{Math.round(p.percent)}%</strong>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SourceNote({ limits, account, now }: { limits: LimitsData; account: AccountStatus | null; now: number }) {
+  if (account?.enabled) {
+    return (
+      <p className="section-note">
+        Uso da conta inteira (navegador, app e Claude Code), atualizado {elapsed(limits.capturedAt, now)}.
+        {account.error && <span className="inline-error"> Última consulta falhou: {account.error}</span>}
+      </p>
+    );
+  }
+  return (
+    <p className="section-note">
+      Atualizado {elapsed(limits.capturedAt, now)}, na última resposta do Claude Code. Para ver o número atualizado
+      também quando você usa o Claude no navegador, ligue "Uso da conta" em Configurações.
+    </p>
+  );
+}
+
 export function Limits({
   limits,
   capture,
+  account,
   onEnable,
   now,
 }: {
   limits: LimitsData | null;
   capture: CaptureStatus | null;
+  account: AccountStatus | null;
   onEnable: () => Promise<void>;
   now: number;
 }) {
@@ -67,7 +112,7 @@ export function Limits({
     }
   }
 
-  if (capture && !capture.enabled) {
+  if (capture && !capture.enabled && !limits) {
     return (
       <div className="card limits-setup">
         <div>
@@ -104,7 +149,8 @@ export function Limits({
           <LimitCard key={w.id} w={w} now={now} />
         ))}
       </div>
-      <p className="section-note">Atualizado {elapsed(limits.capturedAt, now)}</p>
+      <SourceNote limits={limits} account={account} now={now} />
+      {account?.enabled && <Breakdown account={account} />}
     </div>
   );
 }
