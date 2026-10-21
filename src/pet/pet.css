@@ -1,0 +1,114 @@
+/* Barra superior onde o bichinho vive. */
+.playground {
+  position: relative;
+  flex-shrink: 0;
+  height: 76px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+  cursor: crosshair;
+  user-select: none;
+}
+
+.ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  border-bottom: 2px dotted color-mix(in srgb, var(--ink-soft) 35%, transparent);
+  pointer-events: none;
+}
+
+.playground-hint {
+  position: absolute;
+  top: 12px;
+  right: 40px;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.ball {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #f3b49d, var(--accent) 55%, #a8513a);
+  pointer-events: none;
+}
+
+.pet {
+  position: absolute;
+  bottom: 8px;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pet-body {
+  width: 100%;
+  height: 100%;
+}
+
+.pet-body.facing-left {
+  transform: scaleX(-1);
+}
+
+.pet-canvas {
+  display: block;
+}
+
+/* Dormindo: primeiro quadro, um pouco apagado. */
+.pet-sleep .pet-canvas {
+  filter: brightness(0.8) saturate(0.8);
+}
+
+/* Feliz depois de pegar a bolinha: pulinho. */
+.pet-happy .pet-body {
+  animation: hop 0.35s ease-out 2 alternate;
+}
+
+.pet-happy .pet-body.facing-left {
+  animation-name: hop-left;
+}
+
+@keyframes hop {
+  to {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes hop-left {
+  from {
+    transform: scaleX(-1);
+  }
+  to {
+    transform: scaleX(-1) translateY(-8px);
+  }
+}
+
+.pet-bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  transform: translateX(-10%);
+}
+
+.pet-happy .pet-bubble {
+  color: #d64545;
+  font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet * {
+    animation: none !important;
+  }
+}
