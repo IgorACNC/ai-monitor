@@ -1,3 +1,4 @@
+mod account;
 mod commit_watch;
 mod commits;
 mod db;
@@ -6,6 +7,7 @@ mod indexer;
 mod live;
 mod parser;
 mod pets;
+mod prefs;
 pub mod statusline;
 mod widget;
 
@@ -69,8 +71,66 @@ fn kill_session(state: State<AppState>, pid: u32, session_id: String) -> Result<
 }
 
 #[tauri::command]
-fn get_limits(state: State<AppState>) -> Option<statusline::Limits> {
-    statusline::read_limits(&state.data_dir)
+fn get_limits(state: State<AppState>, account: State<account::AccountState>) -> Option<statusline::Limits> {
+    let from_account = account.last.lock().unwrap().as_ref().map(|u| u.limits.clone());
+    account::newest(statusline::read_limits(&state.data_dir), from_account)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AccountStatus {
+    enabled: bool,
+    breakdown: Vec<account::ProductShare>,
+    fetched_at: Option<i64>,
+    error: Option<String>,
+}
+
+fn account_status(account: &account::AccountState) -> AccountStatus {
+    let last = account.last.lock().unwrap();
+    AccountStatus {
+        enabled: account.enabled.get(),
+        breakdown: last.as_ref().map(|u| u.breakdown.clone()).unwrap_or_default(),
+        fetched_at: last.as_ref().map(|u| u.limits.captured_at),
+        error: account.error.lock().unwrap().clone(),
+    }
+}
+
+#[tauri::command]
+fn get_account_usage(account: State<account::AccountState>) -> AccountStatus {
+    account_status(&account)
+}
+
+/// Liga/desliga a consulta do uso da conta; ao ligar, já consulta uma vez.
+#[tauri::command]
+async fn set_account_usage(app: AppHandle, enabled: bool) -> Result<AccountStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let account = app.state::<account::AccountState>();
+        account.enabled.set(enabled)?;
+        if enabled {
+            if let Some(dir) = &app.state::<AppState>().claude_dir {
+                account.refresh(dir);
+            }
+        } else {
+            *account.last.lock().unwrap() = None;
+            *account.error.lock().unwrap() = None;
+        }
+        Ok(account_status(&account))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Consulta o uso da conta a cada poucos minutos, com a janela aberta ou não.
+fn start_account_polling(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        let account = app.state::<account::AccountState>();
+        if account.enabled.get() {
+            if let Some(dir) = &app.state::<AppState>().claude_dir {
+                account.refresh(dir);
+            }
+        }
+        std::thread::sleep(account::POLL);
+    });
 }
 
 fn settings_path(state: &AppState) -> Result<PathBuf, String> {
@@ -281,6 +341,7 @@ pub fn run() {
                 }
             }
             app.manage(widget::WidgetState::load(&data_dir));
+            app.manage(account::AccountState::load(&data_dir));
             let handle = app.handle().clone();
             match commit_watch::CommitWatcher::new(move || {
                 let _ = handle.emit("commits-changed", ());
@@ -297,6 +358,7 @@ pub fn run() {
                 data_dir,
             });
 
+            start_account_polling(app.handle().clone());
             setup_tray(app.handle())?;
             Ok(())
         })
@@ -319,6 +381,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_live_sessions,
             get_limits,
+            get_account_usage,
+            set_account_usage,
             get_capture_status,
             set_capture,
             get_commits,

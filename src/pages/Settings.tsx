@@ -4,7 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { forgetPet, usePetAnimation } from "../pet/library";
 import { PetCanvas } from "../pet/PetCanvas";
 import { selectedPet, type PetSettings } from "../pet/settings";
-import type { CaptureStatus } from "../types";
+import type { AccountStatus, CaptureStatus } from "../types";
 
 function PetOption({
   name,
@@ -80,6 +80,57 @@ function CaptureSection({
   );
 }
 
+function AccountSection({
+  account,
+  onChange,
+}: {
+  account: AccountStatus | null;
+  onChange: (enabled: boolean) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle(enabled: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await onChange(enabled);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="settings-section">
+      <div className="settings-intro">
+        <h2>Uso da conta</h2>
+        <p>
+          Os limites do seu plano são da conta inteira: o Claude no navegador, o app e o Claude Code somam no mesmo
+          número. Com esta opção, o app consulta esse número direto na Anthropic a cada 5 minutos, mesmo quando você
+          não está usando o Claude Code, e mostra quanto da semana veio de cada produto.
+        </p>
+        <p>
+          Para isso ele usa o login que o Claude Code já guardou neste computador, só para ler o uso; o login não é
+          copiado nem enviado a outro lugar. É a mesma consulta que o comando <code>/usage</code> do Claude Code faz,
+          que não é documentada: se a Anthropic mudar, o app volta a usar só os números da statusline.
+        </p>
+      </div>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={account?.enabled ?? false}
+          disabled={busy || account === null}
+          onChange={(e) => toggle(e.target.checked)}
+        />
+        <span>{busy ? "Consultando…" : "Consultar o uso da conta na Anthropic"}</span>
+      </label>
+      {(error ?? account?.error) && <p className="inline-error">{error ?? account?.error}</p>}
+    </section>
+  );
+}
+
 function WidgetSection() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -129,12 +180,16 @@ export function Settings({
   library,
   capture,
   onCaptureChange,
+  account,
+  onAccountChange,
 }: {
   pet: PetSettings;
   onPetChange: (patch: Partial<PetSettings>) => void;
   library: { names: string[] | null; refresh: () => void };
   capture: CaptureStatus | null;
   onCaptureChange: (enabled: boolean) => Promise<void>;
+  account: AccountStatus | null;
+  onAccountChange: (enabled: boolean) => Promise<void>;
 }) {
   const [error, setError] = useState<string | null>(null);
   const current = selectedPet(pet, library.names);
@@ -166,6 +221,7 @@ export function Settings({
   return (
     <div className="settings">
       <CaptureSection capture={capture} onChange={onCaptureChange} />
+      <AccountSection account={account} onChange={onAccountChange} />
       <WidgetSection />
       <section className="settings-section">
         <div className="settings-intro">

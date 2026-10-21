@@ -1,7 +1,7 @@
 import { ActiveSessions } from "../components/ActiveSessions";
 import { Activity, CommitRow, type GithubState } from "../components/Commits";
 import { Limits } from "../components/Limits";
-import type { CaptureStatus, Commit, Limits as LimitsData, LiveSession } from "../types";
+import type { AccountStatus, CaptureStatus, Commit, Limits as LimitsData, LiveSession } from "../types";
 
 const RECENT_COMMITS = 5;
 
@@ -9,6 +9,7 @@ export function Home({
   now,
   limits,
   capture,
+  account,
   onEnableCapture,
   sessions,
   onSessionsChanged,
@@ -19,6 +20,7 @@ export function Home({
   now: number;
   limits: LimitsData | null;
   capture: CaptureStatus | null;
+  account: AccountStatus | null;
   onEnableCapture: () => Promise<void>;
   sessions: LiveSession[];
   onSessionsChanged: () => void;
@@ -30,7 +32,7 @@ export function Home({
     <div className="home">
       <section className="section">
         <h2 className="section-title">Limites de uso</h2>
-        <Limits limits={limits} capture={capture} onEnable={onEnableCapture} now={now} />
+        <Limits limits={limits} capture={capture} account={account} onEnable={onEnableCapture} now={now} />
       </section>
 
       <section className="section">

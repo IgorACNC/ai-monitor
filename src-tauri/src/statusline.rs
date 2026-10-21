@@ -13,7 +13,7 @@ pub const FLAG: &str = "--ai-monitor-statusline";
 const IDENTIFIER: &str = "com.igoracnc.aimonitor";
 
 /// Janelas que o Claude Code informa, na ordem em que aparecem no app.
-const WINDOWS: [(&str, &str); 4] = [
+pub(crate) const WINDOWS: [(&str, &str); 4] = [
     ("five_hour", "Sessão de 5 h"),
     ("seven_day", "Semana"),
     ("seven_day_opus", "Opus na semana"),

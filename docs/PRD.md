@@ -20,6 +20,13 @@ Software desktop (Windows) que funciona como central de verificação do uso do 
 - Cada resposta aparece em várias linhas do `.jsonl` (uma por bloco de conteúdo); o indexador deduplica por `message.id` + `requestId`.
 - O conteúdo das conversas é lido diretamente do `.jsonl` enquanto ele existir.
 
+## Uso da conta (opcional, desligado por padrão)
+
+- Os limites do plano (5 h e semana) são da conta: navegador, app e Claude Code somam juntos. A statusline só traz número novo quando o Claude Code responde, então uso só no navegador ficava desatualizado.
+- Com a opção ligada em Configurações, o app consulta `GET https://api.anthropic.com/api/oauth/usage` (a mesma consulta do `/usage` do Claude Code, **não documentada**) a cada 5 min, em segundo plano, com o token de `~/.claude/.credentials.json`. O token só é lido: não é exibido, copiado, gravado nem renovado pelo app (quem renova é o Claude Code). Expirado → aviso para usar o Claude Code.
+- Os anéis mostram o número mais recente entre statusline e esta consulta. Abaixo deles, a divisão do uso da semana por produto (`seven_day_breakdown`: Claude Code, Chats, Cowork…).
+- Conversas, tokens e sessões do navegador continuam fora do escopo (não há API).
+
 ## Captura de limites (statusline)
 
 - Ativada **somente com consentimento explícito** ("Ativar captura de limites").
