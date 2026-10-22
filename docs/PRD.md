@@ -36,7 +36,7 @@ Software desktop (Windows) que funciona como central de verificação do uso do 
 
 ## Navegação
 
-Barra lateral (Visão geral, Commits, Configurações). Acima do conteúdo: uma **barra de status** fina com data, hora e bateria do computador, e abaixo dela a **faixa do bichinho** (ver seção própria).
+Barra superior com as abas (Visão geral, GitHub, Configurações); a aba GitHub mostra quantos PRs esperam a sua revisão. Acima do conteúdo: uma **barra de status** fina com data, hora e bateria do computador, e abaixo dela a **faixa do bichinho** (ver seção própria).
 
 A interface mostra **porcentagens, não tokens** (decisão do usuário em 2026-10-21): os tokens continuam no banco para o custo estimado do M4.
 
@@ -45,17 +45,35 @@ A interface mostra **porcentagens, não tokens** (decisão do usuário em 2026-1
 1. **Visão geral**:
    - **Limites de uso**: anéis com a % da sessão de 5 h, da semana (e de Opus/Sonnet na semana, quando o Claude Code informa) e quando cada um reinicia. Sem a captura ligada, mostra o convite para ativá-la.
    - **Sessões ativas**: pílulas compactas (status, título, % de contexto), como os tópicos da página inicial do GitHub; clicar abre os detalhes (status, tempo aberta, contexto usado como "X de Y tokens (Z%)" com o tamanho da janela do modelo, projeto, branch, modelo, respostas) e o botão de encerrar.
-   - **Seus commits**: grade de contribuições de 13 semanas, números rápidos (últimos 7 dias, dias seguidos, não enviados) e os 5 commits mais recentes.
+   - **Faixa do GitHub** no topo: "N PRs esperando você · N commits hoje" (commits locais de hoje); leva à aba GitHub. Substitui o card "Seus commits".
+   - **Seletor de agente** "Claude | opencode" (aparece só com o opencode instalado; lembra a escolha; cada botão mostra quantas sessões ativas tem). Claude: limites, divisão por produto e sessões ativas, como antes.
+   - **opencode** (lido só para leitura de `~/.local/share/opencode/opencode.db`):
+     - **Uso** de hoje e dos últimos 7 dias: sessões, respostas, gasto em US$ (o que o opencode registra) e modelo mais usado. Subagentes contam na sessão principal.
+     - **Sessões ativas**: sessões com resposta gravada nos últimos 10 min (uma resposta interrompida não fica ativa para sempre), em pílulas com o % de contexto; o detalhe mostra trabalhando/aguardando, contexto "X de Y tokens (Z%)" (tokens da última resposta / limite do modelo em `~/.cache/opencode/models.json`, a mesma conta da tela do opencode), projeto, modelo, gasto e respostas. Sem encerrar.
+     - O opencode não informa % de plano. As análises de PR feitas pelo app aparecem no opencode com o título "AI Monitor: análise de …".
+   - A barrinha lateral continua só com o Claude.
 2. **Uso**: gráficos e tabelas filtráveis por projeto, modelo, ferramentas e skills (classificação determinística, sem IA).
 3. **Histórico de sessões**: lista de chats (título/primeiro prompt, projeto, data, duração, tokens, custo), busca, visualizador somente leitura e botão **Retomar** (abre o Windows Terminal, com fallback para PowerShell, na pasta do projeto executando `claude --resume <id>`).
    - Uso de subagentes soma na sessão-mãe, com detalhamento "dos quais X em subagentes".
    - Sessões cujo `.jsonl` foi apagado continuam listadas como "conteúdo indisponível".
 4. **Sessões ativas**: um painel por console do Claude Code aberto agora, lido de `~/.claude/sessions/<pid>.json` (com verificação de que o processo ainda existe, pelo horário de início, para não confundir PIDs reaproveitados). Cada painel mostra status ao vivo (trabalhando / aguardando você), tempo aberto, projeto, branch, modelo, tamanho do contexto atual, tokens por tipo (incluindo subagentes), número de respostas, ferramentas mais usadas e o último prompt. Ação: **encerrar** o console, com confirmação. Trazer a janela do terminal para frente está fora do escopo.
-5. **Commits**:
+5. **GitHub** (antes "Commits"): no topo, o gráfico de contribuições com os números rápidos; abaixo, um seletor **Pull requests | Commits** que mostra uma coisa por vez, para não encher a tela.
    - **Commits locais**: `git log` (90 dias, branches locais) dos repositórios onde o Claude Code já trabalhou (pastas conhecidas pelas sessões) + pastas adicionadas manualmente (pendente). São "do usuário" os commits com os e-mails configurados no git e com os e-mails usados em commits assinados com o nome configurado (cobre e-mails antigos). Mostra mensagem, repositório, branch, data e se já foi enviado (push), agrupados por dia.
    - **Gráfico de contribuições**: o mesmo do perfil do GitHub, lido via `gh api graphql` (o `gh` já autenticado; o app não guarda token). Atualiza ao abrir, a cada 10 min e no botão "Atualizar". Exceção consciente ao "100% local". Sem `gh`, a grade usa os commits locais e avisa. Os commits locais e o gráfico do GitHub contam coisas diferentes (o GitHub inclui merges, PRs e atividade de outros computadores; os locais incluem commits ainda não enviados).
    - Commits locais são relidos ~1 s após commit, push ou troca de branch (observador nas pastas `.git`), além da releitura a cada 60 s.
-   - **Feed de eventos** (PRs, issues, reviews): ainda não implementado.
+   - **Commits** aparecem agrupados por dia, 7 dias de cada vez, com "Ver mais".
+   - **Pull requests** (via `gh api graphql`, atualiza ao abrir o app, ao abrir a aba, a cada 5 min e no botão "Atualizar"):
+     - Duas listas: **Esperando sua revisão** (`review-requested:@me`) e **Seus PRs abertos** (`author:@me`), em linhas compactas (título, repositório#número, autor, atualização, resumo dos checks).
+     - Clicar num PR abre um painel ao lado com descrição, branches, situação da revisão, +/−, checks e arquivos alterados, e "Abrir no GitHub".
+     - **Ações** no painel, sempre com confirmação (aparecem para outras pessoas e não se desfazem pelo app):
+       - PRs dos outros: **Aprovar** (comentário opcional) e **Pedir mudanças** (comentário obrigatório), via `gh pr review`.
+       - Seus PRs: **Fazer merge** via `gh pr merge`, com a primeira forma que o repositório permite (merge, squash, rebase) e `--match-head-commit` (só junta se o PR ainda estiver no commit visto no app). Bloqueado em rascunhos e PRs com conflito, com o motivo na tela. A branch não é apagada.
+     - **Análise** no painel: botão "Analisar" com seletor de quem analisa (Claude Haiku/Sonnet/Opus ou opencode) e desempenho (`--effort`: baixo, médio, alto, muito alto, máximo). O padrão fica em Configurações (começa em Sonnet + médio) e a última escolha feita num PR vira o novo padrão. Avisa que o Claude gasta do limite.
+       - Claude: `claude -p --no-session-persistence` com o prompt e o diff pela entrada padrão; ferramentas só `Read,Grep,Glob` (nenhuma sem o repositório local).
+       - opencode: `opencode run --agent plan --format json --dir <pasta>` (o opencode ignora a pasta do processo) com o diff anexado e `OPENCODE_CONFIG_CONTENT` negando comandos, edição e internet; a resposta é o texto da última etapa.
+       - Os dois rodam dentro do repositório quando ele está no computador (pasta de sessão com remoto apontando para o PR); senão, numa pasta vazia, só com o diff (`gh pr diff`, cortado em 150 KB). O app chama o `.exe` real (resolve o `.cmd` do npm), com limite de 15 min.
+       - Formato pedido: VEREDITO (Pronto / Precisa de ajustes / Arriscado), resumo, problemas e sugestões. O parecer fica salvo no banco (tabela `pr_analyses`, o último por PR) e aparece como "desatualizada" quando o PR recebe commits novos. Uma análise em andamento continua se a pessoa trocar de aba.
+       - Sem notificações do Windows por enquanto.
 6. **Configurações**: bichinho, GitHub, pastas, perfis, alertas, idioma, inicialização com o Windows, statusline, oferta (com botão e explicação) de aumentar `cleanupPeriodDays`.
 
 ## Perfis
@@ -116,7 +134,7 @@ A interface mostra **porcentagens, não tokens** (decisão do usuário em 2026-1
 |---|---|---|
 | **M1** ✅ | Esqueleto Tauri + bandeja + indexador `.jsonl` → SQLite | Testes automatizados; totais conferidos com script independente |
 | **M2** ✅ | Barra lateral + Sessões ativas + bichinho (GIFs importados) | Sessões abertas aparecem e somem; encerrar funciona; bichinho persegue a bolinha |
-| **M3** | Commits locais ✅ + % de limites e contexto via statusline ✅ (adiantado do M5) + barra de status; falta: atividade do GitHub via `gh` | Commits batem com `git log`; % aparece após uma resposta |
+| **M3** | Commits locais ✅ + % de limites e contexto via statusline ✅ (adiantado do M5) + barra de status ✅ + gráfico do GitHub ✅ + aba GitHub com PRs, ações e análise ✅ + opencode na Visão geral ✅ | Commits batem com `git log`; % aparece após uma resposta |
 | **M4** | Custo estimado + gráficos + histórico de sessões com visualizador e Retomar | Números batem com os `.jsonl`; retomar abre o terminal |
 | **M5** | Alertas + bandeja colorida | % aparece após uma resposta; notificação dispara |
 | **M6** | Perfis, i18n, auto-start, instalador, auto-update | Instalar via `.msi` numa máquina limpa |

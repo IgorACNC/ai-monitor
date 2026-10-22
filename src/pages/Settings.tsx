@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { AnalyzerPicker, useAnalyzer } from "../components/Analyzer";
 import { forgetPet, usePetAnimation } from "../pet/library";
 import { PetCanvas } from "../pet/PetCanvas";
 import { selectedPet, type PetSettings } from "../pet/settings";
@@ -31,6 +32,23 @@ function PetOption({
         Remover
       </button>
     </div>
+  );
+}
+
+function AnalysisSection() {
+  const [analyzer, setAnalyzer] = useAnalyzer();
+  return (
+    <section className="settings-section">
+      <div className="settings-intro">
+        <h2>Análise de pull requests</h2>
+        <p>
+          Quem analisa os PRs quando você clica em "Analisar" na aba GitHub. O Claude gasta do seu limite: Haiku gasta
+          menos e Opus capricha mais; o desempenho alto pensa por mais tempo. O opencode usa o modelo configurado nele.
+          A última escolha feita no PR vira o novo padrão.
+        </p>
+      </div>
+      <AnalyzerPicker value={analyzer} onChange={setAnalyzer} />
+    </section>
   );
 }
 
@@ -223,6 +241,7 @@ export function Settings({
       <CaptureSection capture={capture} onChange={onCaptureChange} />
       <AccountSection account={account} onChange={onAccountChange} />
       <WidgetSection />
+      <AnalysisSection />
       <section className="settings-section">
         <div className="settings-intro">
           <h2>Bichinho</h2>
