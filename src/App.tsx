@@ -5,18 +5,28 @@ import "@fontsource-variable/bricolage-grotesque/opsz.css";
 import "./App.css";
 import "./pet/pet.css";
 import { TopBar, type Page } from "./components/TopBar";
-import { CommitsPage } from "./pages/CommitsPage";
+import { GithubPage } from "./pages/GithubPage";
 import { Home } from "./pages/Home";
 import { Settings } from "./pages/Settings";
 import { usePetAnimation, usePetLibrary } from "./pet/library";
 import { Playground } from "./pet/Playground";
 import { selectedPet, usePetSettings } from "./pet/settings";
 import type { GithubState } from "./components/Commits";
-import type { AccountStatus, CaptureStatus, Commit, GithubCalendar, Limits, LiveSession } from "./types";
+import { usePrAnalyses, type PullRequestsState } from "./components/PullRequests";
+import type {
+  AccountStatus,
+  CaptureStatus,
+  Commit,
+  GithubCalendar,
+  Limits,
+  LiveSession,
+  OpencodeUsage,
+  PullRequests,
+} from "./types";
 
 const TITLES: Record<Page, string> = {
   home: "Visão geral",
-  commits: "Commits",
+  github: "GitHub",
   settings: "Configurações",
 };
 
@@ -29,6 +39,8 @@ const LIVE_POLL_MS = 3000;
 const COMMITS_POLL_MS = 60_000;
 /** O gráfico do GitHub vem da internet; o próprio GitHub demora para atualizá-lo. */
 const GITHUB_POLL_MS = 10 * 60_000;
+/** PRs também vêm da internet; além disso, são relidos ao abrir a aba GitHub. */
+const PRS_POLL_MS = 5 * 60_000;
 
 function App() {
   const [page, setPage] = useState<Page>("home");
@@ -37,10 +49,15 @@ function App() {
   const [limits, setLimits] = useState<Limits | null>(null);
   const [capture, setCapture] = useState<CaptureStatus | null>(null);
   const [account, setAccount] = useState<AccountStatus | null>(null);
+  const [opencode, setOpencode] = useState<OpencodeUsage | null>(null);
   const [commits, setCommits] = useState<Commit[] | null>(null);
   const [calendar, setCalendar] = useState<GithubCalendar | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [calendarAt, setCalendarAt] = useState<number | null>(null);
+  const [prs, setPrs] = useState<PullRequests | null>(null);
+  const [prsError, setPrsError] = useState<string | null>(null);
+  const [prsAt, setPrsAt] = useState<number | null>(null);
+  const prAnalyses = usePrAnalyses();
   const [error, setError] = useState<string | null>(null);
   const [pet, updatePet] = usePetSettings();
   const petLibrary = usePetLibrary();
@@ -52,12 +69,14 @@ function App() {
       invoke<Limits | null>("get_limits"),
       invoke<CaptureStatus>("get_capture_status"),
       invoke<AccountStatus>("get_account_usage"),
+      invoke<OpencodeUsage>("get_opencode_usage"),
     ])
-      .then(([l, lim, cap, acc]) => {
+      .then(([l, lim, cap, acc, oc]) => {
         setLive(l);
         setLimits(lim);
         setCapture(cap);
         setAccount(acc);
+        setOpencode(oc);
         setNow(Date.now());
         setError(null);
       })
@@ -89,6 +108,35 @@ function App() {
 
   const github: GithubState = { calendar, error: calendarError, fetchedAt: calendarAt, refresh: refreshGithub };
 
+  const refreshPrs = useCallback(async () => {
+    try {
+      setPrs(await invoke<PullRequests>("get_pull_requests"));
+      setPrsAt(Date.now());
+      setPrsError(null);
+    } catch (e) {
+      // Mantém a última lista baixada e mostra o erro ao lado dela.
+      setPrsError(String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshPrs();
+    const id = setInterval(refreshPrs, PRS_POLL_MS);
+    return () => clearInterval(id);
+  }, [refreshPrs]);
+
+  useEffect(() => {
+    if (page === "github") refreshPrs();
+  }, [page, refreshPrs]);
+
+  const prsState: PullRequestsState = {
+    data: prs,
+    error: prsError,
+    fetchedAt: prsAt,
+    refresh: refreshPrs,
+    analyses: prAnalyses,
+  };
+
   useEffect(() => {
     refresh();
     refreshCommits();
@@ -115,7 +163,7 @@ function App() {
 
   return (
     <div className="shell">
-      <TopBar page={page} onNavigate={setPage} />
+      <TopBar page={page} onNavigate={setPage} badges={{ github: prs?.reviewRequested.length }} />
       <div className="main">
         {pet.enabled && (
           <Playground
@@ -143,12 +191,13 @@ function App() {
               onEnableCapture={() => setCaptureEnabled(true)}
               sessions={live}
               onSessionsChanged={refresh}
+              opencode={opencode}
+              prsWaiting={prs ? prs.reviewRequested.length : null}
               commits={commits}
-              github={github}
-              onSeeCommits={() => setPage("commits")}
+              onOpenGithub={() => setPage("github")}
             />
           )}
-          {page === "commits" && <CommitsPage commits={commits} github={github} now={now} />}
+          {page === "github" && <GithubPage commits={commits} github={github} prs={prsState} now={now} />}
           {page === "settings" && (
             <Settings
               pet={pet}

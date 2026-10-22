@@ -1,10 +1,12 @@
 mod account;
+mod analysis;
 mod commit_watch;
 mod commits;
 mod db;
 mod github;
 mod indexer;
 mod live;
+mod opencode;
 mod parser;
 mod pets;
 mod prefs;
@@ -188,6 +190,75 @@ async fn get_github_calendar() -> Result<github::Calendar, String> {
     tauri::async_runtime::spawn_blocking(github::fetch_calendar)
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// PRs abertos que esperam você ou que você abriu; consulta a internet pelo `gh`.
+#[tauri::command]
+async fn get_pull_requests() -> Result<github::PullRequests, String> {
+    tauri::async_runtime::spawn_blocking(github::fetch_pull_requests)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Aprova ou pede mudanças num PR. A confirmação é feita na tela antes de chamar.
+#[tauri::command]
+async fn review_pull_request(repo: String, number: u64, action: github::ReviewAction, body: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || github::review(&repo, number, action, &body))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Faz o merge de um PR, só se ele ainda estiver no commit `head_sha` que a pessoa viu.
+#[tauri::command]
+async fn merge_pull_request(repo: String, number: u64, method: github::MergeMethod, head_sha: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || github::merge(&repo, number, method, &head_sha))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn get_pr_analyses(state: State<AppState>) -> Result<Vec<analysis::Analysis>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    db::analyses(&conn).map_err(|e| e.to_string())
+}
+
+/// Roda o Claude Code ou o opencode sobre o PR (pode levar minutos) e guarda o parecer.
+#[tauri::command]
+async fn analyze_pull_request(
+    app: AppHandle,
+    repo: String,
+    number: i64,
+    analyzer: analysis::Analyzer,
+) -> Result<analysis::Analysis, String> {
+    let (dirs, data_dir) = {
+        let state = app.state::<AppState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let dirs: Vec<PathBuf> = db::session_dirs(&conn).map_err(|e| e.to_string())?.into_iter().map(PathBuf::from).collect();
+        (dirs, state.data_dir.clone())
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let now = chrono::Utc::now().timestamp_millis();
+        let result = analysis::analyze(&repo, number, analyzer, &dirs, &data_dir, now)?;
+        let state = app.state::<AppState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        db::save_analysis(&conn, &result).map_err(|e| e.to_string())?;
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Sessões ativas e resumo de hoje e da semana do opencode (lê o banco dele, sem alterar).
+#[tauri::command]
+fn get_opencode_usage() -> opencode::OpencodeUsage {
+    let home = dirs::home_dir().unwrap_or_default();
+    let now = chrono::Local::now();
+    let today_start = now
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .and_then(|d| d.and_local_timezone(chrono::Local).earliest())
+        .map_or(now.timestamp_millis(), |d| d.timestamp_millis());
+    opencode::usage(&home, now.timestamp_millis(), today_start)
 }
 
 #[tauri::command]
@@ -387,6 +458,12 @@ pub fn run() {
             set_capture,
             get_commits,
             get_github_calendar,
+            get_pull_requests,
+            review_pull_request,
+            merge_pull_request,
+            get_pr_analyses,
+            analyze_pull_request,
+            get_opencode_usage,
             kill_session,
             show_main,
             get_widget_enabled,

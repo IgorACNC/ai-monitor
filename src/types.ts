@@ -59,3 +59,89 @@ export type AccountStatus = {
   fetchedAt: number | null;
   error: string | null;
 };
+
+export type CheckOutcome = "success" | "failure" | "pending" | "neutral";
+
+/** PR aberto no GitHub, lido pelo `gh`. */
+export type PullRequest = {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  draft: boolean;
+  createdAt: number;
+  updatedAt: number;
+  body: string;
+  head: string;
+  base: string;
+  reviewDecision: string | null;
+  headSha: string;
+  checks: CheckOutcome | null;
+  checkRuns: { name: string; outcome: CheckOutcome }[];
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  files: { path: string; additions: number; deletions: number }[];
+  /** "MERGEABLE", "CONFLICTING" ou "UNKNOWN" (o GitHub ainda está calculando). */
+  mergeable: string;
+  /** Forma de merge que o app usa: a primeira que o repositório permite. */
+  mergeMethod: MergeMethod | null;
+};
+
+export type MergeMethod = "merge" | "squash" | "rebase";
+
+export type PullRequests = {
+  /** De outras pessoas, pedindo a sua revisão. */
+  reviewRequested: PullRequest[];
+  /** Abertos por você. */
+  mine: PullRequest[];
+};
+
+/** Quem analisa um PR: o Claude Code (modelo e desempenho) ou o opencode. */
+export type Analyzer = { agent: "claude"; model: string; effort: string } | { agent: "opencode" };
+
+export type Analysis = {
+  repo: string;
+  number: number;
+  /** Commit analisado; diferente do atual quer dizer que o PR mudou depois. */
+  headSha: string;
+  analyzer: Analyzer;
+  verdict: "pronto" | "ajustes" | "arriscado" | null;
+  text: string;
+  localRepo: boolean;
+  createdAt: number;
+};
+
+/** Sessão do opencode com resposta nos últimos minutos. */
+export type OpencodeSession = {
+  id: string;
+  title: string;
+  directory: string;
+  /** "provedor/modelo". */
+  model: string | null;
+  busy: boolean;
+  startedAt: number;
+  lastActivity: number;
+  responses: number;
+  /** Em dólares, como o opencode registra. */
+  cost: number;
+  contextTokens: number;
+  /** `null` quando o modelo não está na lista do opencode. */
+  contextLimit: number | null;
+};
+
+export type OpencodePeriod = {
+  sessions: number;
+  responses: number;
+  cost: number;
+  topModel: string | null;
+};
+
+export type OpencodeUsage = {
+  installed: boolean;
+  active: OpencodeSession[];
+  today: OpencodePeriod;
+  week: OpencodePeriod;
+  error: string | null;
+};

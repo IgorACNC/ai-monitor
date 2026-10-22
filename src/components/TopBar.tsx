@@ -59,16 +59,25 @@ function BatteryIcon({ level, charging }: { level: number; charging: boolean }) 
   );
 }
 
-export type Page = "home" | "commits" | "settings";
+export type Page = "home" | "github" | "settings";
 
 const PAGES: { id: Page; label: string }[] = [
   { id: "home", label: "Visão geral" },
-  { id: "commits", label: "Commits" },
+  { id: "github", label: "GitHub" },
   { id: "settings", label: "Configurações" },
 ];
 
 /** Barra do topo: marca e navegação à esquerda; data, hora e bateria à direita. */
-export function TopBar({ page, onNavigate }: { page: Page; onNavigate: (p: Page) => void }) {
+export function TopBar({
+  page,
+  onNavigate,
+  badges,
+}: {
+  page: Page;
+  onNavigate: (p: Page) => void;
+  /** Número ao lado do nome da aba, ex.: PRs esperando a sua revisão. */
+  badges: Partial<Record<Page, number>>;
+}) {
   const now = useClock();
   const battery = useBattery();
   const pct = battery ? Math.round(battery.level * 100) : null;
@@ -90,6 +99,7 @@ export function TopBar({ page, onNavigate }: { page: Page; onNavigate: (p: Page)
             onClick={() => onNavigate(p.id)}
           >
             {p.label}
+            {!!badges[p.id] && <span className="tab-badge">{badges[p.id]}</span>}
           </button>
         ))}
       </nav>

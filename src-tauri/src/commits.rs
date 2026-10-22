@@ -34,7 +34,7 @@ fn git(dir: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-fn repo_root(dir: &Path) -> Option<PathBuf> {
+pub(crate) fn repo_root(dir: &Path) -> Option<PathBuf> {
     if !dir.is_dir() {
         return None;
     }

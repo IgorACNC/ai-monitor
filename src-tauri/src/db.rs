@@ -57,6 +57,19 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE TABLE IF NOT EXISTS dirs (
     cwd TEXT PRIMARY KEY
 );
+
+-- Último parecer de cada PR (Analisar com Claude/opencode).
+CREATE TABLE IF NOT EXISTS pr_analyses (
+    repo       TEXT NOT NULL,
+    number     INTEGER NOT NULL,
+    head_sha   TEXT NOT NULL,
+    analyzer   TEXT NOT NULL,
+    verdict    TEXT,
+    text       TEXT NOT NULL,
+    local_repo INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (repo, number)
+);
 ";
 
 /// Versão do esquema. Ao subir, os `.jsonl` são relidos do início para preencher
@@ -258,6 +271,45 @@ pub fn totals_between(
 }
 
 /// Pastas em que o Claude Code já trabalhou.
+pub fn save_analysis(conn: &Connection, a: &crate::analysis::Analysis) -> rusqlite::Result<()> {
+    let analyzer = serde_json::to_string(&a.analyzer).expect("Analyzer sempre vira JSON");
+    conn.execute(
+        "INSERT OR REPLACE INTO pr_analyses VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite::params![a.repo, a.number, a.head_sha, analyzer, a.verdict, a.text, a.local_repo, a.created_at],
+    )?;
+    Ok(())
+}
+
+pub fn analyses(conn: &Connection) -> rusqlite::Result<Vec<crate::analysis::Analysis>> {
+    let mut stmt = conn.prepare(
+        "SELECT repo, number, head_sha, analyzer, verdict, text, local_repo, created_at FROM pr_analyses",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(3)?,
+            crate::analysis::Analysis {
+                repo: r.get(0)?,
+                number: r.get(1)?,
+                head_sha: r.get(2)?,
+                analyzer: crate::analysis::Analyzer::Opencode,
+                verdict: r.get(4)?,
+                text: r.get(5)?,
+                local_repo: r.get(6)?,
+                created_at: r.get(7)?,
+            },
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (analyzer, mut a) = row?;
+        // Linha com um formato antigo/desconhecido de analisador é ignorada.
+        let Ok(parsed) = serde_json::from_str(&analyzer) else { continue };
+        a.analyzer = parsed;
+        out.push(a);
+    }
+    Ok(out)
+}
+
 pub fn session_dirs(conn: &Connection) -> rusqlite::Result<Vec<String>> {
     conn.prepare("SELECT cwd FROM dirs")?
         .query_map([], |r| r.get(0))?
@@ -572,5 +624,28 @@ mod tests {
         set_file_offset(&conn, "a.jsonl", 99).unwrap();
         init(&conn).unwrap();
         assert_eq!(file_offset(&conn, "a.jsonl").unwrap(), 99);
+    }
+
+    #[test]
+    fn keeps_latest_analysis_per_pull_request() {
+        use crate::analysis::{Analysis, Analyzer};
+        let conn = Connection::open_in_memory().unwrap();
+        init(&conn).unwrap();
+        let mut a = Analysis {
+            repo: "a/b".into(),
+            number: 7,
+            head_sha: "abc".into(),
+            analyzer: Analyzer::Claude { model: "sonnet".into(), effort: "medium".into() },
+            verdict: Some("pronto".into()),
+            text: "ok".into(),
+            local_repo: true,
+            created_at: 1,
+        };
+        save_analysis(&conn, &a).unwrap();
+        a.head_sha = "def".into();
+        a.analyzer = Analyzer::Opencode;
+        a.verdict = None;
+        save_analysis(&conn, &a).unwrap();
+        assert_eq!(analyses(&conn).unwrap(), vec![a]);
     }
 }
