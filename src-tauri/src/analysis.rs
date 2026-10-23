@@ -61,11 +61,15 @@ fn no_window(cmd: &mut Command) {
     let _ = cmd;
 }
 
-/// Caminho do `.exe` de um programa do PATH. Instalações pelo npm só deixam um `.cmd` que chama
-/// o `.exe`; o app chama o `.exe` direto, para o prompt não passar pelo `cmd.exe`.
 fn find_exe(name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
+    find_in(std::env::split_paths(&std::env::var_os("PATH")?), name)
+}
+
+/// Caminho do `.exe` de um programa. Instalações pelo npm só deixam um `.cmd` que chama
+/// o `.exe`; o app chama o `.exe` direto, para o prompt não passar pelo `cmd.exe`.
+#[cfg(windows)]
+fn find_in(dirs: impl Iterator<Item = PathBuf>, name: &str) -> Option<PathBuf> {
+    for dir in dirs {
         let exe = dir.join(format!("{name}.exe"));
         if exe.is_file() {
             return Some(exe);
@@ -79,6 +83,13 @@ fn find_exe(name: &str) -> Option<PathBuf> {
     None
 }
 
+/// Mac e Linux: o programa fica no PATH sem extensão.
+#[cfg(not(windows))]
+fn find_in(mut dirs: impl Iterator<Item = PathBuf>, name: &str) -> Option<PathBuf> {
+    dirs.find_map(|dir| Some(dir.join(name)).filter(|exe| exe.is_file()))
+}
+
+#[cfg(windows)]
 fn exe_in_npm_shim(text: &str, dir: &Path) -> Option<PathBuf> {
     let line = text.lines().find(|l| l.contains(".exe\""))?;
     let start = line.find("\"%dp0%\\")? + "\"%dp0%\\".len();
@@ -344,6 +355,7 @@ pub fn analyze(
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn finds_exe_behind_npm_shim() {
         let tmp = tempfile::tempdir().unwrap();
@@ -353,6 +365,17 @@ mod tests {
         let shim = "@ECHO off\r\nSETLOCAL\r\nCALL :find_dp0\r\n\"%dp0%\\node_modules\\x\\bin\\claude.exe\"   %*\r\n";
         assert_eq!(exe_in_npm_shim(shim, tmp.path()), Some(tmp.path().join("node_modules\\x\\bin\\claude.exe")));
         assert_eq!(exe_in_npm_shim("@ECHO off\r\nnode x.js %*", tmp.path()), None);
+    }
+
+    #[test]
+    fn finds_program_in_path_dirs() {
+        let empty = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let file = if cfg!(windows) { "opencode.exe" } else { "opencode" };
+        std::fs::write(tmp.path().join(file), b"").unwrap();
+        let dirs = || [empty.path().to_path_buf(), tmp.path().to_path_buf()].into_iter();
+        assert_eq!(find_in(dirs(), "opencode"), Some(tmp.path().join(file)));
+        assert_eq!(find_in(dirs(), "claude"), None);
     }
 
     #[test]

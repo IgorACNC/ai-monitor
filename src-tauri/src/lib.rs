@@ -10,6 +10,7 @@ mod opencode;
 mod parser;
 mod pets;
 mod prefs;
+mod shell_path;
 pub mod statusline;
 mod widget;
 
@@ -152,7 +153,7 @@ fn get_capture_status(state: State<AppState>) -> Result<statusline::CaptureStatu
 fn set_capture(state: State<AppState>, enabled: bool) -> Result<statusline::CaptureStatus, String> {
     let settings = settings_path(&state)?;
     if enabled {
-        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe = app_exe().map_err(|e| e.to_string())?;
         statusline::enable(&settings, &state.data_dir, &exe)?;
     } else {
         statusline::disable(&settings, &state.data_dir)?;
@@ -383,8 +384,20 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Caminho que a statusline do Claude Code chama. No Linux, o AppImage roda de uma pasta
+/// temporária que muda a cada abertura; o caminho fixo é o do próprio arquivo `.AppImage`.
+fn app_exe() -> std::io::Result<PathBuf> {
+    match std::env::var_os("APPIMAGE") {
+        Some(appimage) if !appimage.is_empty() => Ok(PathBuf::from(appimage)),
+        _ => std::env::current_exe(),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(not(windows))]
+    shell_path::fix();
+
     tauri::Builder::default()
         // Abrir o app de novo (pelo atalho, por exemplo) só traz de volta a janela já aberta.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
@@ -406,7 +419,7 @@ pub fn run() {
             // O app instalado assume a captura das porcentagens, mesmo que ela tenha sido
             // ligada pela versão de desenvolvimento (cuja pasta pode ser apagada).
             #[cfg(not(debug_assertions))]
-            if let (Some(dir), Ok(exe)) = (&claude_dir, std::env::current_exe()) {
+            if let (Some(dir), Ok(exe)) = (&claude_dir, app_exe()) {
                 if let Err(e) = statusline::repoint(&dir.join("settings.json"), &data_dir, &exe) {
                     eprintln!("não foi possível atualizar a statusline: {e}");
                 }
@@ -473,6 +486,13 @@ pub fn run() {
             add_pet,
             remove_pet
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app, _event| {
+            // Mac: clicar no ícone do Dock com a janela escondida traz ela de volta.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                show_main_window(_app);
+            }
+        });
 }
