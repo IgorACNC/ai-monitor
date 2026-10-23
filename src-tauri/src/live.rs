@@ -23,7 +23,21 @@ pub struct LiveEntry {
 }
 
 /// Diferença entre as épocas do FILETIME do Windows (1601) e do Unix (1970), em segundos.
+#[cfg(windows)]
 const FILETIME_UNIX_OFFSET_SECS: u64 = 11_644_473_600;
+
+/// Início do processo gravado pelo Claude Code. No Windows ele vem em FILETIME; nos outros
+/// sistemas o formato não é conhecido, então a conferência fica pelo nome do processo.
+#[cfg(windows)]
+fn proc_start_secs(v: &Value) -> Option<u64> {
+    let filetime = v.get("procStart")?.as_str()?.parse::<u64>().ok()?;
+    Some((filetime / 10_000_000).saturating_sub(FILETIME_UNIX_OFFSET_SECS))
+}
+
+#[cfg(not(windows))]
+fn proc_start_secs(_: &Value) -> Option<u64> {
+    None
+}
 
 pub fn parse_entry(json: &str) -> Option<LiveEntry> {
     let v: Value = serde_json::from_str(json).ok()?;
@@ -35,9 +49,7 @@ pub fn parse_entry(json: &str) -> Option<LiveEntry> {
         name: s("name"),
         status: s("status"),
         started_at: v.get("startedAt").and_then(Value::as_i64),
-        proc_start_secs: s("procStart")
-            .and_then(|p| p.parse::<u64>().ok())
-            .map(|filetime| (filetime / 10_000_000).saturating_sub(FILETIME_UNIX_OFFSET_SECS)),
+        proc_start_secs: proc_start_secs(&v),
     })
 }
 
@@ -86,15 +98,16 @@ pub fn kill(claude_dir: &Path, pid: u32, session_id: &str) -> Result<(), String>
         .find(|e| e.pid == pid && e.session_id == session_id)
         .ok_or("Essa sessão já foi encerrada.")?;
 
-    let mut cmd = std::process::Command::new("taskkill");
-    cmd.args(["/PID", &entry.pid.to_string(), "/T", "/F"]);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    let out = cmd
+    kill_tree(entry.pid)
+}
+
+#[cfg(windows)]
+fn kill_tree(pid: u32) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let out = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| format!("Não foi possível executar o taskkill: {e}"))?;
     if out.status.success() {
@@ -105,6 +118,40 @@ pub fn kill(claude_dir: &Path, pid: u32, session_id: &str) -> Result<(), String>
             String::from_utf8_lossy(&out.stderr).trim()
         ))
     }
+}
+
+/// Mac e Linux: pede para fechar (SIGTERM) o console e os processos que ele abriu.
+#[cfg(not(windows))]
+fn kill_tree(pid: u32) -> Result<(), String> {
+    let mut sys = System::new();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+    let links: Vec<(u32, Option<u32>)> =
+        sys.processes().iter().map(|(p, proc_)| (p.as_u32(), proc_.parent().map(|pp| pp.as_u32()))).collect();
+    // Filhos antes do pai, para nenhum ficar órfão no caminho.
+    for p in descendants(pid, &links).into_iter().rev().chain([pid]) {
+        if let Some(process) = sys.process(Pid::from_u32(p)) {
+            if process.kill_with(sysinfo::Signal::Term) == Some(false) && p == pid {
+                return Err("O sistema recusou o encerramento do console.".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Todos os descendentes de `root` (filhos, netos...), a partir de pares (processo, pai).
+#[cfg_attr(windows, allow(dead_code))]
+fn descendants(root: u32, links: &[(u32, Option<u32>)]) -> Vec<u32> {
+    let mut out = Vec::new();
+    let mut frontier = vec![root];
+    while let Some(parent) = frontier.pop() {
+        for &(child, p) in links {
+            if p == Some(parent) && child != root && !out.contains(&child) {
+                out.push(child);
+                frontier.push(child);
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -120,7 +167,19 @@ mod tests {
         assert_eq!(e.status.as_deref(), Some("busy"));
         assert_eq!(e.started_at, Some(1792545877594));
         // 134370194741009430 / 1e7 - 11644473600 = 1792545874 (3 s antes do startedAt).
+        #[cfg(windows)]
         assert_eq!(e.proc_start_secs, Some(1792545874));
+        #[cfg(not(windows))]
+        assert_eq!(e.proc_start_secs, None, "fora do Windows o formato não é conhecido");
+    }
+
+    #[test]
+    fn finds_every_descendant_once() {
+        let links = [(1, None), (10, Some(1)), (11, Some(10)), (12, Some(10)), (20, Some(2)), (13, Some(11))];
+        let mut d = descendants(1, &links);
+        d.sort();
+        assert_eq!(d, vec![10, 11, 12, 13]);
+        assert!(descendants(20, &links).is_empty());
     }
 
     #[test]
@@ -129,6 +188,7 @@ mod tests {
         assert_eq!(parse_entry("lixo"), None);
     }
 
+    #[cfg(windows)]
     #[test]
     fn current_process_is_recognized_as_alive() {
         let tmp = tempfile::tempdir().unwrap();

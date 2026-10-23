@@ -1,0 +1,65 @@
+# Gera os instaladores de Windows, Mac e Linux quando uma versão é marcada com um tag
+# (ex.: git tag v0.2.0 && git push origin v0.2.0) e os coloca numa Release em rascunho.
+# Depois é só conferir a Release no GitHub e clicar em "Publish release".
+name: Lançar versão
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: ""
+          # Um app só para Mac com chip Apple e Mac Intel.
+          - os: macos-latest
+            args: "--target universal-apple-darwin"
+          - os: ubuntu-22.04
+            args: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bibliotecas do Linux (janela, bandeja, ícones)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: AI Monitor ${{ github.ref_name }}
+          releaseBody: |
+            Baixe o instalador do seu sistema em "Assets", logo abaixo.
+
+            - **Windows**: `AI.Monitor_..._x64-setup.exe`. Se aparecer o aviso azul, clique em "Mais informações" → "Executar assim mesmo".
+            - **Mac**: `AI.Monitor_..._universal.dmg`. O app não é assinado pela Apple: na primeira vez, clique com o botão direito no app → "Abrir". Veja o README.
+            - **Linux**: `.deb` (Ubuntu/Debian) ou `.AppImage` (qualquer distribuição; dê permissão de execução).
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

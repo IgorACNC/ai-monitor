@@ -1,0 +1,48 @@
+# Roda em todo PR e em todo push para a main: confere que o app compila e que os testes
+# passam no Windows, no Mac e no Linux. O resultado aparece como ✅/❌ na página do PR.
+name: Testes
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bibliotecas do Linux (janela, bandeja, ícones)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Testes da interface
+        run: npm test
+
+      # Também gera a pasta dist, que o Rust precisa para compilar.
+      - name: Tipos e build da interface
+        run: npm run build
+
+      - name: Testes do Rust
+        working-directory: src-tauri
+        run: cargo test

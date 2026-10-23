@@ -116,8 +116,10 @@ A interface mostra **porcentagens, não tokens** (decisão do usuário em 2026-1
 
 ## Distribuição
 
-- Instalador `.msi`/`.exe` no GitHub Releases, auto-update pelo updater do Tauri, repositório público com licença MIT.
-- Sem assinatura de código no início (o Windows SmartScreen exibirá um aviso).
+- Windows, Mac e Linux. Instaladores gerados pelo GitHub Actions (`.github/workflows/release.yml`) ao enviar um tag `v*`: `.exe` (NSIS), `.dmg` universal (Apple Silicon e Intel), `.deb` e `.AppImage`, numa Release em rascunho que o usuário publica. `check.yml` roda os testes nos três sistemas em todo PR.
+- Sem assinatura de código: o Windows SmartScreen exibe um aviso; no Mac o app tem só a assinatura ad-hoc (gratuita) e precisa ser liberado na primeira abertura (README). Decisão do usuário (2026-10-22): não pagar a conta de desenvolvedor da Apple.
+- Diferenças fora do Windows, todas atrás de `cfg`: encerrar sessão manda SIGTERM ao console e aos processos filhos (no Windows, `taskkill /T`); a conferência do PID é pelo nome do processo (o `procStart` só é lido no formato do Windows); `claude`/`opencode` são achados sem extensão no PATH; o PATH do app é completado com o do shell do usuário e pastas comuns (apps abertos pelo Finder/menu não herdam o do terminal); no AppImage a statusline aponta para o arquivo `.AppImage` (variável `APPIMAGE`); no Mac, clicar no Dock reabre a janela.
+- Auto-update pelo updater do Tauri: ainda não implementado.
 
 ## Fora do escopo
 
