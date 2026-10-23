@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { AnalyzerPicker, useAnalyzer } from "../components/Analyzer";
+import { AnalyzerPicker, analyzerAgents, useAnalyzer, type AnalyzerAgent } from "../components/Analyzer";
 import { forgetPet, usePetAnimation } from "../pet/library";
 import { PetCanvas } from "../pet/PetCanvas";
 import { selectedPet, type PetSettings } from "../pet/settings";
-import type { AccountStatus, CaptureStatus } from "../types";
+import { AGENT_NAMES } from "../components/AgentView";
+import type { AccountStatus, AgentId, AgentInfo, CaptureStatus } from "../types";
 
 function PetOption({
   name,
@@ -35,8 +36,68 @@ function PetOption({
   );
 }
 
-function AnalysisSection() {
-  const [analyzer, setAnalyzer] = useAnalyzer();
+function AgentsSection({
+  agents,
+  onChange,
+}: {
+  agents: AgentInfo[] | null;
+  onChange: (id: AgentId, connected: boolean) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<AgentId | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle(id: AgentId, connected: boolean) {
+    setBusy(id);
+    setError(null);
+    try {
+      await onChange(id, connected);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="settings-section">
+      <div className="settings-intro">
+        <h2>Agentes</h2>
+        <p>
+          Os agentes que aparecem na Visão geral. Desconectar só tira o agente do app: nada muda nele nem nos arquivos
+          dele, e dá para conectar de novo pelo botão + da Visão geral. Desconectar o Claude também desliga a barrinha
+          de uso.
+        </p>
+      </div>
+      {agents === null ? (
+        <p className="muted">Carregando…</p>
+      ) : (
+        <ul className="agent-list">
+          {agents.map((a) => (
+            <li key={a.id}>
+              <span className="agent-list-name">{AGENT_NAMES[a.id]}</span>
+              <span className="muted-inline">
+                {a.connected ? "Conectado" : a.found ? "Encontrado neste computador" : "Não encontrado neste computador"}
+              </span>
+              <button
+                type="button"
+                className={`button ${a.connected ? "button-quiet" : "button-primary"}`}
+                disabled={busy !== null}
+                onClick={() => toggle(a.id, !a.connected)}
+              >
+                {busy === a.id ? "Salvando…" : a.connected ? "Desconectar" : "Conectar"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="inline-error">{error}</p>}
+    </section>
+  );
+}
+
+function AnalysisSection({ available }: { available: AnalyzerAgent[] }) {
+  const [analyzer, setAnalyzer] = useAnalyzer(available);
+  if (!analyzer) return null;
   return (
     <section className="settings-section">
       <div className="settings-intro">
@@ -47,7 +108,7 @@ function AnalysisSection() {
           A última escolha feita no PR vira o novo padrão.
         </p>
       </div>
-      <AnalyzerPicker value={analyzer} onChange={setAnalyzer} />
+      <AnalyzerPicker value={analyzer} available={available} onChange={setAnalyzer} />
     </section>
   );
 }
@@ -200,6 +261,8 @@ export function Settings({
   onCaptureChange,
   account,
   onAccountChange,
+  agents,
+  onAgentChange,
 }: {
   pet: PetSettings;
   onPetChange: (patch: Partial<PetSettings>) => void;
@@ -208,9 +271,12 @@ export function Settings({
   onCaptureChange: (enabled: boolean) => Promise<void>;
   account: AccountStatus | null;
   onAccountChange: (enabled: boolean) => Promise<void>;
+  agents: AgentInfo[] | null;
+  onAgentChange: (id: AgentId, connected: boolean) => Promise<void>;
 }) {
   const [error, setError] = useState<string | null>(null);
   const current = selectedPet(pet, library.names);
+  const claudeOn = agents?.some((a) => a.id === "claude" && a.connected) ?? false;
 
   async function addGif() {
     setError(null);
@@ -238,10 +304,11 @@ export function Settings({
 
   return (
     <div className="settings">
+      <AgentsSection agents={agents} onChange={onAgentChange} />
       <CaptureSection capture={capture} onChange={onCaptureChange} />
       <AccountSection account={account} onChange={onAccountChange} />
-      <WidgetSection />
-      <AnalysisSection />
+      {claudeOn && <WidgetSection />}
+      <AnalysisSection available={analyzerAgents(agents)} />
       <section className="settings-section">
         <div className="settings-intro">
           <h2>Bichinho</h2>

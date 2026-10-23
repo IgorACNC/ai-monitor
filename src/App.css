@@ -964,8 +964,118 @@ code {
   color: var(--accent);
 }
 
-.home > .segmented {
+/* ---------- Agentes: troca, botão + e lista nas Configurações ---------- */
+
+.agent-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin-bottom: -12px;
+}
+
+.agent-add {
+  position: relative;
+}
+
+.agent-add-button {
+  width: 36px;
+  height: 36px;
+  border: 1px dashed var(--rule);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.agent-add-button:hover,
+.agent-add-button[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.agent-add-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+
+.limits-setup .agent-add-menu {
+  right: 0;
+  left: auto;
+}
+
+.agent-add-menu button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-add-menu button:hover,
+.agent-add-menu button:focus-visible {
+  background: var(--surface-2);
+}
+
+.agent-add-menu button span:last-child {
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.agent-found {
+  color: var(--ok);
+}
+
+.agent-add-menu .inline-error {
+  padding: 6px 12px;
+}
+
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+.agent-list li:last-child {
+  border-bottom: 0;
+}
+
+.agent-list-name {
+  min-width: 90px;
+  font-weight: 600;
+}
+
+.agent-list .button {
+  margin-left: auto;
 }
 
 .oc-summary {

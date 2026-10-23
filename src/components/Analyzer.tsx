@@ -1,7 +1,14 @@
 import { useCallback, useState } from "react";
-import type { Analyzer } from "../types";
+import type { Analyzer, AgentInfo } from "../types";
 
 type ClaudeAnalyzer = Extract<Analyzer, { agent: "claude" }>;
+/** Agentes que sabem analisar PRs. */
+export type AnalyzerAgent = Analyzer["agent"];
+
+/** Agentes conectados que sabem analisar PRs. */
+export function analyzerAgents(agents: AgentInfo[] | null): AnalyzerAgent[] {
+  return (agents ?? []).flatMap((a) => (a.connected && (a.id === "claude" || a.id === "opencode") ? [a.id] : []));
+}
 
 const KEY = "ai-monitor.analyzer";
 const DEFAULT: ClaudeAnalyzer = { agent: "claude", model: "sonnet", effort: "medium" };
@@ -39,8 +46,11 @@ function load(): Analyzer {
   return DEFAULT;
 }
 
-/** Escolha de quem analisa os PRs; vale como padrão e guarda a última usada. */
-export function useAnalyzer() {
+/**
+ * Escolha de quem analisa os PRs; vale como padrão e guarda a última usada. Se o agente
+ * escolhido foi desconectado, usa outro de `available`; `null` se nenhum estiver conectado.
+ */
+export function useAnalyzer(available: AnalyzerAgent[]) {
   const [analyzer, setAnalyzer] = useState<Analyzer>(load);
   const update = useCallback((next: Analyzer) => {
     setAnalyzer(next);
@@ -50,7 +60,14 @@ export function useAnalyzer() {
       // Sem armazenamento, a escolha vale só até fechar o app.
     }
   }, []);
-  return [analyzer, update] as const;
+  const usable: Analyzer | null = available.includes(analyzer.agent)
+    ? analyzer
+    : available.includes("claude")
+      ? DEFAULT
+      : available.includes("opencode")
+        ? { agent: "opencode" }
+        : null;
+  return [usable, update] as const;
 }
 
 export function analyzerLabel(a: Analyzer) {
@@ -60,13 +77,15 @@ export function analyzerLabel(a: Analyzer) {
   return `${model}, desempenho ${effort}`;
 }
 
-/** Dois seletores: modelo (ou opencode) e desempenho. */
+/** Dois seletores: modelo (ou opencode) e desempenho, só com os agentes conectados. */
 export function AnalyzerPicker({
   value,
+  available,
   onChange,
   disabled,
 }: {
   value: Analyzer;
+  available: AnalyzerAgent[];
   onChange: (a: Analyzer) => void;
   disabled?: boolean;
 }) {
@@ -86,12 +105,13 @@ export function AnalyzerPicker({
             )
           }
         >
-          {MODELS.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-            </option>
-          ))}
-          <option value={OPENCODE}>opencode (grátis, não gasta o Claude)</option>
+          {available.includes("claude") &&
+            MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          {available.includes("opencode") && <option value={OPENCODE}>opencode (grátis, não gasta o Claude)</option>}
         </select>
       </label>
       <label>

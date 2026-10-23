@@ -1,15 +1,18 @@
 # AI Monitor
 
-Um app para o computador (Windows, Mac e Linux) que mostra quanto você já usou do **Claude Code**, quais
-conversas estão abertas agora e como anda o seu GitHub, tudo numa janela só. Ele roda no seu computador e lê os
-dados que o Claude Code já guarda; não tem conta, login nem servidor.
+Um app para o computador (Windows, Mac e Linux) que mostra quanto você já usou do **Claude Code** (e também do
+**opencode**, do **Codex** e do **Gemini CLI**), quais conversas estão abertas agora e como anda o seu GitHub, tudo
+numa janela só. Ele roda no seu computador e lê os dados que esses agentes já guardam; não tem conta, login nem
+servidor.
 
 ## O que ele mostra
 
 - **Limites de uso**: a porcentagem já usada da sessão de 5 horas e da semana, e quando cada uma reinicia.
 - **Sessões ativas**: os terminais do Claude Code abertos agora, com o quanto do contexto cada um já usou. Dá para
   encerrar um terminal por ali.
-- **opencode**: se você usa o opencode, uma aba mostra o uso dele e as sessões abertas.
+- **Outros agentes**: opencode, Codex e Gemini CLI, cada um na sua aba, com o uso de hoje e da semana e as sessões
+  abertas. O Codex também mostra as porcentagens do plano (5 horas e semana); o Gemini não guarda esse número no
+  computador, então ele não aparece.
 - **GitHub**: seu gráfico de contribuições, seus commits e os pull requests que esperam você. Dá para aprovar,
   pedir mudanças, fazer merge e pedir para o Claude (ou o opencode) analisar um PR.
 - **Barrinha de uso** (opcional): uma barra pequena no canto da tela com as porcentagens quando o app está minimizado.
@@ -68,8 +71,9 @@ paga), não por haver algo errado com ele.
 
 ## Primeiros passos
 
-- **Precisa ter o [Claude Code](https://claude.com/claude-code) instalado e já usado pelo menos uma vez** neste
-  computador. É dele que vêm os dados.
+- **Agentes**: na primeira abertura, o app conecta sozinho os agentes que encontrar no computador (Claude Code,
+  opencode, Codex, Gemini CLI). Para adicionar outro, use o botão **+** na Visão geral; para tirar um, vá em
+  **Configurações → Agentes**. Os dados de cada um aparecem depois que ele for usado pelo menos uma vez.
 - **Porcentagens de uso**: na primeira abertura, clique em **"Mostrar porcentagens"**. O app passa a ler os números
   que o Claude Code informa a cada resposta. A statusline que você já usa continua funcionando, e um backup é feito
   antes. Dá para desligar em Configurações.
@@ -98,6 +102,7 @@ quando você liga uma destas opções:
 - **Uso da conta**: consulta suas porcentagens na Anthropic usando o login que o Claude Code já tem. O login não é
   copiado nem enviado para outro lugar.
 - **GitHub**: usa o `gh` que você mesmo conectou à sua conta.
+- **opencode, Codex e Gemini**: o app só lê os arquivos que eles já gravam no computador, sem internet.
 - **Analisar PR**: roda o Claude Code ou o opencode do seu computador, só com permissão de leitura do código. A análise
   com o Claude gasta do seu limite de uso.
 

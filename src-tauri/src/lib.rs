@@ -1,8 +1,11 @@
 mod account;
+mod agents;
 mod analysis;
+mod codex;
 mod commit_watch;
 mod commits;
 mod db;
+mod gemini;
 mod github;
 mod indexer;
 mod live;
@@ -30,6 +33,10 @@ struct AppState {
     claude_dir: Option<PathBuf>,
     pets_dir: PathBuf,
     data_dir: PathBuf,
+    /// Agentes conectados pelo usuário, na ordem em que foram conectados.
+    agents: Mutex<Vec<agents::Agent>>,
+    codex_files: agents::FileCache<codex::Rollout>,
+    gemini_files: agents::FileCache<gemini::Chat>,
 }
 
 #[derive(Serialize)]
@@ -249,9 +256,53 @@ async fn analyze_pull_request(
     .map_err(|e| e.to_string())?
 }
 
-/// Sessões ativas e resumo de hoje e da semana do opencode (lê o banco dele, sem alterar).
+fn agent_list(state: &AppState) -> Vec<agents::AgentInfo> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let connected = state.agents.lock().unwrap();
+    agents::ALL
+        .into_iter()
+        .map(|id| agents::AgentInfo {
+            id,
+            connected: connected.contains(&id),
+            found: agents::found(id, &home, state.claude_dir.as_deref()),
+        })
+        .collect()
+}
+
+/// Os quatro agentes, se estão conectados e se há sinal deles no computador.
 #[tauri::command]
-fn get_opencode_usage() -> opencode::OpencodeUsage {
+fn get_agents(state: State<AppState>) -> Vec<agents::AgentInfo> {
+    agent_list(&state)
+}
+
+/// Conecta ou desconecta um agente. Só muda o que o app mostra; nada é alterado no agente.
+/// A barrinha mostra o Claude: desconectá-lo também a desliga.
+#[tauri::command]
+fn set_agent_connected(
+    app: AppHandle,
+    state: State<AppState>,
+    widget: State<widget::WidgetState>,
+    agent: agents::Agent,
+    connected: bool,
+) -> Result<Vec<agents::AgentInfo>, String> {
+    if agent == agents::Agent::Claude && !connected {
+        widget.set_enabled(false)?;
+        widget::sync(&app);
+    }
+    {
+        let mut list = state.agents.lock().unwrap();
+        let mut next = list.clone();
+        agents::set_connected(&mut next, agent, connected);
+        agents::save(&state.data_dir, &next)?;
+        *list = next;
+    }
+    Ok(agent_list(&state))
+}
+
+/// Sessões ativas, resumo de hoje e da semana (e, no Codex, as % do plano) de opencode, Codex
+/// ou Gemini, lidos dos arquivos de cada um sem alterar nada.
+#[tauri::command]
+fn get_agent_usage(state: State<AppState>, agent: agents::Agent) -> Result<agents::AgentUsage, String> {
     let home = dirs::home_dir().unwrap_or_default();
     let now = chrono::Local::now();
     let today_start = now
@@ -259,7 +310,13 @@ fn get_opencode_usage() -> opencode::OpencodeUsage {
         .and_hms_opt(0, 0, 0)
         .and_then(|d| d.and_local_timezone(chrono::Local).earliest())
         .map_or(now.timestamp_millis(), |d| d.timestamp_millis());
-    opencode::usage(&home, now.timestamp_millis(), today_start)
+    let now = now.timestamp_millis();
+    match agent {
+        agents::Agent::Opencode => Ok(opencode::usage(&home, now, today_start)),
+        agents::Agent::Codex => Ok(codex::usage(&home, &state.codex_files, now, today_start)),
+        agents::Agent::Gemini => Ok(gemini::usage(&home, &state.gemini_files, now, today_start)),
+        agents::Agent::Claude => Err("O uso do Claude Code vem de get_limits e get_live_sessions.".into()),
+    }
 }
 
 #[tauri::command]
@@ -435,11 +492,16 @@ pub fn run() {
                 }
                 Err(e) => eprintln!("não foi possível observar os repositórios: {e}"),
             }
+            let home = dirs::home_dir().unwrap_or_default();
+            let connected = agents::connected(&data_dir, |a| agents::found(a, &home, claude_dir.as_deref()));
             app.manage(AppState {
                 conn,
                 claude_dir,
                 pets_dir: data_dir.join("pets"),
                 data_dir,
+                agents: Mutex::new(connected),
+                codex_files: Default::default(),
+                gemini_files: Default::default(),
             });
 
             start_account_polling(app.handle().clone());
@@ -476,7 +538,9 @@ pub fn run() {
             merge_pull_request,
             get_pr_analyses,
             analyze_pull_request,
-            get_opencode_usage,
+            get_agents,
+            set_agent_connected,
+            get_agent_usage,
             kill_session,
             show_main,
             get_widget_enabled,

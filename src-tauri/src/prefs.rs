@@ -23,15 +23,27 @@ impl Toggle {
         self.value.load(Ordering::Relaxed)
     }
 
-    /// Salva no arquivo sem mexer nas outras opções guardadas nele.
     pub fn set(&self, value: bool) -> Result<(), String> {
-        let mut v = read_object(&self.file);
-        v[self.key] = Value::Bool(value);
-        std::fs::write(&self.file, v.to_string())
-            .map_err(|e| format!("Não foi possível salvar a preferência: {e}"))?;
+        write_key(&self.file, self.key, Value::Bool(value))?;
         self.value.store(value, Ordering::Relaxed);
         Ok(())
     }
+}
+
+/// Valor guardado em `key`, se houver.
+pub fn get(data_dir: &Path, key: &str) -> Option<Value> {
+    read_object(&data_dir.join("ui.json")).get(key).cloned()
+}
+
+pub fn set(data_dir: &Path, key: &str, value: Value) -> Result<(), String> {
+    write_key(&data_dir.join("ui.json"), key, value)
+}
+
+/// Salva no arquivo sem mexer nas outras opções guardadas nele.
+fn write_key(file: &Path, key: &str, value: Value) -> Result<(), String> {
+    let mut v = read_object(file);
+    v[key] = value;
+    std::fs::write(file, v.to_string()).map_err(|e| format!("Não foi possível salvar a preferência: {e}"))
 }
 
 fn read_object(file: &Path) -> Value {
