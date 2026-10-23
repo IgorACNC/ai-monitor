@@ -1,19 +1,93 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActiveSessions } from "../components/ActiveSessions";
+import { AGENT_NAMES, AgentView } from "../components/AgentView";
 import { Limits } from "../components/Limits";
-import { OpencodeView } from "../components/OpencodeView";
 import { dayKey, fmt } from "../format";
-import type { AccountStatus, CaptureStatus, Commit, Limits as LimitsData, LiveSession, OpencodeUsage } from "../types";
+import type {
+  AccountStatus,
+  AgentId,
+  AgentInfo,
+  AgentUsage,
+  CaptureStatus,
+  Commit,
+  Limits as LimitsData,
+  LiveSession,
+} from "../types";
 
-type Agent = "claude" | "opencode";
 const AGENT_KEY = "ai-monitor.agent";
 
-function loadAgent(): Agent {
+function loadAgent(): string | null {
   try {
-    return localStorage.getItem(AGENT_KEY) === "opencode" ? "opencode" : "claude";
+    return localStorage.getItem(AGENT_KEY);
   } catch {
-    return "claude";
+    return null;
   }
+}
+
+/** Botão + com a lista dos agentes ainda não conectados. */
+function AddAgent({
+  agents,
+  onConnect,
+  label,
+}: {
+  agents: AgentInfo[];
+  onConnect: (id: AgentId) => Promise<void>;
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+
+  async function connect(id: AgentId) {
+    setError(null);
+    try {
+      await onConnect(id);
+      setOpen(false);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  return (
+    <div className="agent-add" ref={box}>
+      <button
+        className={label ? "button button-primary" : "agent-add-button"}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Conectar um agente"
+        aria-label={label ? undefined : "Conectar um agente"}
+        onClick={() => setOpen(!open)}
+      >
+        {label ?? "+"}
+      </button>
+      {open && (
+        <div className="agent-add-menu card" role="menu">
+          {agents.map((a) => (
+            <button key={a.id} role="menuitem" onClick={() => connect(a.id)}>
+              <span>{AGENT_NAMES[a.id]}</span>
+              <span className={a.found ? "agent-found" : "muted-inline"}>
+                {a.found ? "encontrado neste computador" : "não encontrado"}
+              </span>
+            </button>
+          ))}
+          {error && <p className="inline-error">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Faixa fina com o resumo do GitHub; leva para a aba GitHub. */
@@ -53,7 +127,9 @@ export function Home({
   onEnableCapture,
   sessions,
   onSessionsChanged,
-  opencode,
+  agents,
+  usage,
+  onConnect,
   prsWaiting,
   commits,
   onOpenGithub,
@@ -65,17 +141,20 @@ export function Home({
   onEnableCapture: () => Promise<void>;
   sessions: LiveSession[];
   onSessionsChanged: () => void;
-  opencode: OpencodeUsage | null;
+  agents: AgentInfo[] | null;
+  usage: Partial<Record<AgentId, AgentUsage>>;
+  onConnect: (id: AgentId) => Promise<void>;
   prsWaiting: number | null;
   commits: Commit[] | null;
   onOpenGithub: () => void;
 }) {
-  const [saved, setSaved] = useState<Agent>(loadAgent);
-  // Só mostra a troca se houver outro agente instalado.
-  const hasOpencode = opencode?.installed ?? false;
-  const agent: Agent = hasOpencode ? saved : "claude";
+  const [saved, setSaved] = useState<string | null>(loadAgent);
+  const connected = (agents ?? []).filter((a) => a.connected).map((a) => a.id);
+  const notConnected = (agents ?? []).filter((a) => !a.connected);
+  // A escolha salva vale enquanto o agente estiver conectado.
+  const agent = connected.find((a) => a === saved) ?? connected[0] ?? null;
 
-  function choose(a: Agent) {
+  function choose(a: AgentId) {
     setSaved(a);
     try {
       localStorage.setItem(AGENT_KEY, a);
@@ -84,23 +163,42 @@ export function Home({
     }
   }
 
+  async function connect(a: AgentId) {
+    await onConnect(a);
+    choose(a);
+  }
+
+  const count = (a: AgentId) => (a === "claude" ? sessions.length : (usage[a]?.active.length ?? 0));
+
   return (
     <div className="home">
       <GithubStrip prsWaiting={prsWaiting} commits={commits} now={now} onOpen={onOpenGithub} />
 
-      {hasOpencode && (
-        <div className="segmented" role="tablist" aria-label="Agente">
-          {(["claude", "opencode"] as const).map((a) => (
-            <button key={a} role="tab" aria-selected={agent === a} className={agent === a ? "active" : ""} onClick={() => choose(a)}>
-              {a === "claude" ? "Claude" : "opencode"}
-              {a === "opencode" && opencode!.active.length > 0 && <span className="count">{opencode!.active.length}</span>}
-              {a === "claude" && sessions.length > 0 && <span className="count">{sessions.length}</span>}
-            </button>
-          ))}
+      {agents !== null && connected.length === 0 && (
+        <div className="card limits-setup">
+          <div>
+            <h3>Conecte um agente para ver o uso</h3>
+            <p>Claude Code, opencode, Codex ou Gemini: escolha os que você usa neste computador.</p>
+          </div>
+          <AddAgent agents={notConnected} onConnect={connect} label="Conectar agente" />
         </div>
       )}
 
-      {agent === "claude" ? (
+      {connected.length > 0 && (
+        <div className="agent-bar">
+          <div className="segmented" role="tablist" aria-label="Agente">
+            {connected.map((a) => (
+              <button key={a} role="tab" aria-selected={agent === a} className={agent === a ? "active" : ""} onClick={() => choose(a)}>
+                {AGENT_NAMES[a]}
+                {count(a) > 0 && <span className="count">{count(a)}</span>}
+              </button>
+            ))}
+          </div>
+          {notConnected.length > 0 && <AddAgent agents={notConnected} onConnect={connect} />}
+        </div>
+      )}
+
+      {agent === "claude" && (
         <>
           <section className="section">
             <h2 className="section-title">Limites de uso</h2>
@@ -114,9 +212,8 @@ export function Home({
             <ActiveSessions sessions={sessions} now={now} onChanged={onSessionsChanged} />
           </section>
         </>
-      ) : (
-        <OpencodeView usage={opencode!} now={now} />
       )}
+      {agent !== null && agent !== "claude" && <AgentView key={agent} agent={agent} usage={usage[agent] ?? null} now={now} />}
     </div>
   );
 }

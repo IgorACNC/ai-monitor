@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { elapsed, fmt } from "../format";
 import type { Analysis, Analyzer, CheckOutcome, MergeMethod, PullRequest, PullRequests as PullRequestsData } from "../types";
-import { AnalyzerPicker, analyzerLabel, useAnalyzer } from "./Analyzer";
+import { AnalyzerPicker, analyzerLabel, useAnalyzer, type AnalyzerAgent } from "./Analyzer";
 
 export type PullRequestsState = {
   data: PullRequestsData | null;
@@ -22,13 +22,15 @@ export type PrAnalyses = {
   running: Record<string, Running>;
   errors: Record<string, string>;
   analyze: (pr: PullRequest, analyzer: Analyzer) => void;
+  /** Agentes conectados que sabem analisar. */
+  available: AnalyzerAgent[];
 };
 
 /**
  * Pareceres dos PRs. Fica no App (e não na aba) para uma análise de minutos continuar
  * aparecendo como "analisando" mesmo se a pessoa trocar de aba no meio.
  */
-export function usePrAnalyses(): PrAnalyses {
+export function usePrAnalyses(available: AnalyzerAgent[]): PrAnalyses {
   const [saved, setSaved] = useState<Record<string, Analysis>>({});
   const [running, setRunning] = useState<Record<string, Running>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -50,7 +52,7 @@ export function usePrAnalyses(): PrAnalyses {
       .finally(() => setRunning(without));
   }, []);
 
-  return { saved, running, errors, analyze };
+  return { saved, running, errors, analyze, available };
 }
 
 const CHECK_LABEL: Record<CheckOutcome, string> = {
@@ -265,7 +267,7 @@ const VERDICT: Record<string, { label: string; className: string }> = {
 };
 
 function PrAnalysis({ pr, analyses, now }: { pr: PullRequest; analyses: PrAnalyses; now: number }) {
-  const [analyzer, setAnalyzer] = useAnalyzer();
+  const [analyzer, setAnalyzer] = useAnalyzer(analyses.available);
   const key = prKey(pr);
   const saved = analyses.saved[key];
   const running = analyses.running[key];
@@ -299,9 +301,13 @@ function PrAnalysis({ pr, analyses, now }: { pr: PullRequest; analyses: PrAnalys
           {now - running.startedAt >= 60_000 && ` há ${Math.floor((now - running.startedAt) / 60_000)} min`}… Pode levar
           alguns minutos; dá para trocar de aba.
         </p>
+      ) : !analyzer ? (
+        <p className="muted">
+          Para analisar PRs, conecte o Claude ou o opencode no botão + da Visão geral.
+        </p>
       ) : (
         <div className="analysis-controls">
-          <AnalyzerPicker value={analyzer} onChange={setAnalyzer} />
+          <AnalyzerPicker value={analyzer} available={analyses.available} onChange={setAnalyzer} />
           <button className="button button-primary" onClick={() => analyses.analyze(pr, analyzer)}>
             {saved ? "Analisar de novo" : "Analisar"}
           </button>

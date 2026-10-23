@@ -1,22 +1,38 @@
 import { useState } from "react";
 import { baseName, compact, elapsed, fmt, severity } from "../format";
-import type { OpencodeSession, OpencodeUsage, OpencodePeriod } from "../types";
+import type { AgentId, AgentPeriod, AgentSession, AgentUsage, Limits } from "../types";
+import { LimitCard } from "./Limits";
+
+export const AGENT_NAMES: Record<AgentId, string> = {
+  claude: "Claude",
+  opencode: "opencode",
+  codex: "Codex",
+  gemini: "Gemini",
+};
+
+/** O que cada agente mostra (ou não) sobre plano e gasto. */
+const USAGE_NOTE: Partial<Record<AgentId, string>> = {
+  opencode:
+    "O opencode não informa porcentagem de plano; o que ele mostra é o contexto de cada sessão, que aparece abaixo. O gasto vem dos preços que o opencode registra (modelos grátis ficam em US$ 0).",
+  gemini:
+    "O Gemini não guarda a porcentagem do plano no computador; o que dá para ver é o contexto de cada sessão, que aparece abaixo.",
+};
 
 const usd = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD" });
 
 /** "opencode/nemotron-3-ultra-free" → "nemotron-3-ultra-free". */
 const modelName = (m: string | null) => (m ? m.slice(m.indexOf("/") + 1) : "—");
 
-const titleOf = (s: OpencodeSession) => s.title || "Sessão sem título";
+const titleOf = (s: AgentSession) => s.title || "Sessão sem título";
 
-function contextPercent(s: OpencodeSession) {
+function contextPercent(s: AgentSession) {
   return s.contextLimit ? (s.contextTokens / s.contextLimit) * 100 : null;
 }
 
-function Detail({ session, now }: { session: OpencodeSession; now: number }) {
+function Detail({ session, now }: { session: AgentSession; now: number }) {
   const pct = contextPercent(session);
   return (
-    <div className="session-detail" id={`oc-${session.id}`}>
+    <div className="session-detail" id={`agent-${session.id}`}>
       <div className="session-detail-head">
         <div>
           <p className="session-status">
@@ -34,7 +50,7 @@ function Detail({ session, now }: { session: OpencodeSession; now: number }) {
             {pct === null ? (
               <span>
                 {compact.format(session.contextTokens)} tokens{" "}
-                <span className="muted-inline">(o limite deste modelo não está na lista do opencode)</span>
+                <span className="muted-inline">(o limite deste modelo não é conhecido)</span>
               </span>
             ) : (
               <span className={`context context-${severity(pct)}`}>
@@ -57,10 +73,12 @@ function Detail({ session, now }: { session: OpencodeSession; now: number }) {
           <dt>Modelo</dt>
           <dd>{modelName(session.model)}</dd>
         </div>
-        <div>
-          <dt>Gasto</dt>
-          <dd>{usd.format(session.cost)}</dd>
-        </div>
+        {session.cost !== null && (
+          <div>
+            <dt>Gasto</dt>
+            <dd>{usd.format(session.cost)}</dd>
+          </div>
+        )}
         <div>
           <dt>Respostas</dt>
           <dd>{fmt.format(session.responses)}</dd>
@@ -70,7 +88,7 @@ function Detail({ session, now }: { session: OpencodeSession; now: number }) {
   );
 }
 
-function PeriodCard({ title, period }: { title: string; period: OpencodePeriod }) {
+function PeriodCard({ title, period }: { title: string; period: AgentPeriod }) {
   return (
     <div className="oc-period">
       <h3>{title}</h3>
@@ -83,34 +101,79 @@ function PeriodCard({ title, period }: { title: string; period: OpencodePeriod }
           <dt>Respostas</dt>
           <dd>{fmt.format(period.responses)}</dd>
         </div>
-        <div>
-          <dt>Gasto</dt>
-          <dd>{usd.format(period.cost)}</dd>
-        </div>
+        {period.cost !== null && (
+          <div>
+            <dt>Gasto</dt>
+            <dd>{usd.format(period.cost)}</dd>
+          </div>
+        )}
       </dl>
       <p className="muted">Modelo mais usado: {modelName(period.topModel)}</p>
     </div>
   );
 }
 
-/** Visão geral do opencode: resumo do uso e as sessões com resposta nos últimos minutos. */
-export function OpencodeView({ usage, now }: { usage: OpencodeUsage; now: number }) {
+/** % do plano que o Codex grava a cada resposta. */
+function PlanLimits({ limits, name, now }: { limits: Limits | null; name: string; now: number }) {
+  if (!limits || limits.windows.length === 0) {
+    return (
+      <div className="card limits-waiting">
+        <p>As porcentagens do plano aparecem aqui depois da próxima resposta do {name}.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="limits">
+      <div className="limits-grid">
+        {limits.windows.map((w) => (
+          <LimitCard key={w.id} w={w} now={now} />
+        ))}
+      </div>
+      <p className="section-note">
+        Atualizado {elapsed(limits.capturedAt, now)}, na última resposta do {name}. Uso pelo site ou por outro computador
+        só aparece depois da próxima resposta aqui.
+      </p>
+    </div>
+  );
+}
+
+/** Visão geral de opencode, Codex ou Gemini: % do plano (Codex), resumo do uso e sessões ativas. */
+export function AgentView({ agent, usage, now }: { agent: AgentId; usage: AgentUsage | null; now: number }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const name = AGENT_NAMES[agent];
+
+  if (!usage) return <p className="empty-line">Lendo os dados do {name}…</p>;
+  if (!usage.installed) {
+    return (
+      <div className="card limits-waiting">
+        <p>
+          Ainda não há dados de uso do {name} neste computador. Eles aparecem aqui sozinhos depois que você usar o{" "}
+          {name}.
+        </p>
+      </div>
+    );
+  }
+
   const open = usage.active.find((s) => s.id === openId) ?? null;
+  const note = USAGE_NOTE[agent];
 
   return (
     <>
       {usage.error && <p className="message message-error">{usage.error}</p>}
+      {agent === "codex" && (
+        <section className="section">
+          <h2 className="section-title">Limites de uso</h2>
+          <PlanLimits limits={usage.limits} name={name} now={now} />
+        </section>
+      )}
+
       <section className="section">
         <h2 className="section-title">Uso</h2>
         <div className="card oc-summary">
           <PeriodCard title="Hoje" period={usage.today} />
           <PeriodCard title="Últimos 7 dias" period={usage.week} />
         </div>
-        <p className="section-note">
-          O opencode não informa porcentagem de plano; o que ele mostra é o contexto de cada sessão, que aparece
-          abaixo. O gasto vem dos preços que o opencode registra (modelos grátis ficam em US$ 0).
-        </p>
+        {note && <p className="section-note">{note}</p>}
       </section>
 
       <section className="section">
@@ -118,7 +181,7 @@ export function OpencodeView({ usage, now }: { usage: OpencodeUsage; now: number
           Sessões ativas {usage.active.length > 0 && <span className="count">{usage.active.length}</span>}
         </h2>
         {usage.active.length === 0 ? (
-          <p className="empty-line">Nenhuma sessão do opencode respondeu nos últimos 10 minutos.</p>
+          <p className="empty-line">Nenhuma sessão do {name} respondeu nos últimos 10 minutos.</p>
         ) : (
           <div className="active-sessions">
             <ul className="pills">
@@ -130,7 +193,7 @@ export function OpencodeView({ usage, now }: { usage: OpencodeUsage; now: number
                     <button
                       className={`pill${selected ? " selected" : ""}`}
                       aria-expanded={selected}
-                      aria-controls={`oc-${s.id}`}
+                      aria-controls={`agent-${s.id}`}
                       title={titleOf(s)}
                       onClick={() => setOpenId(selected ? null : s.id)}
                     >

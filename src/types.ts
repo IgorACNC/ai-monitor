@@ -113,35 +113,46 @@ export type Analysis = {
   createdAt: number;
 };
 
-/** Sessão do opencode com resposta nos últimos minutos. */
-export type OpencodeSession = {
+export type AgentId = "claude" | "opencode" | "codex" | "gemini";
+
+export type AgentInfo = {
+  id: AgentId;
+  connected: boolean;
+  /** Há sinal dele neste computador (pasta de dados ou programa instalado). */
+  found: boolean;
+};
+
+/** Sessão do opencode, Codex ou Gemini com resposta nos últimos minutos. */
+export type AgentSession = {
   id: string;
   title: string;
   directory: string;
-  /** "provedor/modelo". */
   model: string | null;
   busy: boolean;
   startedAt: number;
   lastActivity: number;
   responses: number;
-  /** Em dólares, como o opencode registra. */
-  cost: number;
+  /** Em dólares; só o opencode registra. */
+  cost: number | null;
   contextTokens: number;
-  /** `null` quando o modelo não está na lista do opencode. */
+  /** `null` quando o limite do modelo não é conhecido. */
   contextLimit: number | null;
 };
 
-export type OpencodePeriod = {
+export type AgentPeriod = {
   sessions: number;
   responses: number;
-  cost: number;
+  cost: number | null;
   topModel: string | null;
 };
 
-export type OpencodeUsage = {
+export type AgentUsage = {
+  /** Há dados dele neste computador. */
   installed: boolean;
-  active: OpencodeSession[];
-  today: OpencodePeriod;
-  week: OpencodePeriod;
+  active: AgentSession[];
+  today: AgentPeriod;
+  week: AgentPeriod;
+  /** % do plano; só o Codex informa. */
+  limits: Limits | null;
   error: string | null;
 };

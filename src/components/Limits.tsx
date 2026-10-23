@@ -22,7 +22,7 @@ function Ring({ pct }: { pct: number }) {
   );
 }
 
-function LimitCard({ w, now }: { w: LimitWindow; now: number }) {
+export function LimitCard({ w, now }: { w: LimitWindow; now: number }) {
   const pct = Math.round(w.usedPercentage);
   return (
     <div className="limit">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "@fontsource-variable/bricolage-grotesque/opsz.css";
@@ -11,16 +11,19 @@ import { Settings } from "./pages/Settings";
 import { usePetAnimation, usePetLibrary } from "./pet/library";
 import { Playground } from "./pet/Playground";
 import { selectedPet, usePetSettings } from "./pet/settings";
+import { analyzerAgents } from "./components/Analyzer";
 import type { GithubState } from "./components/Commits";
 import { usePrAnalyses, type PullRequestsState } from "./components/PullRequests";
 import type {
   AccountStatus,
+  AgentId,
+  AgentInfo,
+  AgentUsage,
   CaptureStatus,
   Commit,
   GithubCalendar,
   Limits,
   LiveSession,
-  OpencodeUsage,
   PullRequests,
 } from "./types";
 
@@ -29,6 +32,11 @@ const TITLES: Record<Page, string> = {
   github: "GitHub",
   settings: "Configurações",
 };
+
+/** Agentes cujo uso vem de `get_agent_usage` (o do Claude tem comandos próprios). */
+const OTHER_AGENTS = ["opencode", "codex", "gemini"] as const;
+
+const EMPTY_PERIOD = { sessions: 0, responses: 0, cost: null, topModel: null };
 
 /** Status das sessões e porcentagens mudam sem aviso; são lidos a cada poucos segundos. */
 const LIVE_POLL_MS = 3000;
@@ -49,7 +57,10 @@ function App() {
   const [limits, setLimits] = useState<Limits | null>(null);
   const [capture, setCapture] = useState<CaptureStatus | null>(null);
   const [account, setAccount] = useState<AccountStatus | null>(null);
-  const [opencode, setOpencode] = useState<OpencodeUsage | null>(null);
+  const [agents, setAgents] = useState<AgentInfo[] | null>(null);
+  // O refresh periódico lê a lista atual sem precisar ser recriado a cada mudança.
+  const agentsRef = useRef<AgentInfo[] | null>(null);
+  const [usage, setUsage] = useState<Partial<Record<AgentId, AgentUsage>>>({});
   const [commits, setCommits] = useState<Commit[] | null>(null);
   const [calendar, setCalendar] = useState<GithubCalendar | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
@@ -57,31 +68,69 @@ function App() {
   const [prs, setPrs] = useState<PullRequests | null>(null);
   const [prsError, setPrsError] = useState<string | null>(null);
   const [prsAt, setPrsAt] = useState<number | null>(null);
-  const prAnalyses = usePrAnalyses();
+  const prAnalyses = usePrAnalyses(analyzerAgents(agents));
   const [error, setError] = useState<string | null>(null);
   const [pet, updatePet] = usePetSettings();
   const petLibrary = usePetLibrary();
   const { anim: petAnim, error: petError } = usePetAnimation(pet.enabled ? selectedPet(pet, petLibrary.names) : null);
 
   const refresh = useCallback(() => {
+    const on = (id: AgentId) => agentsRef.current?.some((a) => a.id === id && a.connected) ?? false;
+    const claude = on("claude");
     Promise.all([
-      invoke<LiveSession[]>("get_live_sessions"),
-      invoke<Limits | null>("get_limits"),
+      claude ? invoke<LiveSession[]>("get_live_sessions") : Promise.resolve([]),
+      claude ? invoke<Limits | null>("get_limits") : Promise.resolve(null),
+      // Ficam nas Configurações mesmo com o Claude desconectado.
       invoke<CaptureStatus>("get_capture_status"),
       invoke<AccountStatus>("get_account_usage"),
-      invoke<OpencodeUsage>("get_opencode_usage"),
     ])
-      .then(([l, lim, cap, acc, oc]) => {
+      .then(([l, lim, cap, acc]) => {
         setLive(l);
         setLimits(lim);
         setCapture(cap);
         setAccount(acc);
-        setOpencode(oc);
         setNow(Date.now());
         setError(null);
       })
       .catch((e) => setError(String(e)));
+    for (const id of OTHER_AGENTS) {
+      if (!on(id)) continue;
+      invoke<AgentUsage>("get_agent_usage", { agent: id })
+        .catch(
+          (e): AgentUsage => ({
+            installed: true,
+            active: [],
+            today: EMPTY_PERIOD,
+            week: EMPTY_PERIOD,
+            limits: null,
+            error: String(e),
+          }),
+        )
+        .then((u) => setUsage((prev) => ({ ...prev, [id]: u })));
+    }
   }, []);
+
+  const applyAgents = useCallback(
+    (list: AgentInfo[]) => {
+      agentsRef.current = list;
+      setAgents(list);
+      refresh();
+    },
+    [refresh],
+  );
+
+  useEffect(() => {
+    invoke<AgentInfo[]>("get_agents")
+      .then(applyAgents)
+      .catch((e) => setError(String(e)));
+  }, [applyAgents]);
+
+  const setAgentConnected = useCallback(
+    async (agent: AgentId, connected: boolean) => {
+      applyAgents(await invoke<AgentInfo[]>("set_agent_connected", { agent, connected }));
+    },
+    [applyAgents],
+  );
 
   const refreshCommits = useCallback(() => {
     invoke<Commit[]>("get_commits")
@@ -191,7 +240,9 @@ function App() {
               onEnableCapture={() => setCaptureEnabled(true)}
               sessions={live}
               onSessionsChanged={refresh}
-              opencode={opencode}
+              agents={agents}
+              usage={usage}
+              onConnect={(id) => setAgentConnected(id, true)}
               prsWaiting={prs ? prs.reviewRequested.length : null}
               commits={commits}
               onOpenGithub={() => setPage("github")}
@@ -210,6 +261,8 @@ function App() {
                 setAccount(await invoke<AccountStatus>("set_account_usage", { enabled }));
                 refresh();
               }}
+              agents={agents}
+              onAgentChange={setAgentConnected}
             />
           )}
         </main>

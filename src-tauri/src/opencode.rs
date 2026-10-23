@@ -6,12 +6,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags};
-use serde::Serialize;
 use serde_json::Value;
 
-/// Sessão com resposta nos últimos minutos conta como ativa.
-const ACTIVE_WINDOW_MS: i64 = 10 * 60 * 1000;
-const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+use crate::agents::{ACTIVE_WINDOW_MS, AgentSession, AgentUsage, DAY_MS, Reply};
 
 pub fn db_path(home: &Path) -> PathBuf {
     home.join(".local").join("share").join("opencode").join("opencode.db")
@@ -19,43 +16,6 @@ pub fn db_path(home: &Path) -> PathBuf {
 
 pub fn models_path(home: &Path) -> PathBuf {
     home.join(".cache").join("opencode").join("models.json")
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct OpencodeSession {
-    pub id: String,
-    pub title: String,
-    pub directory: String,
-    /// "provedor/modelo" da última resposta.
-    pub model: Option<String>,
-    /// A última resposta ainda está sendo escrita.
-    pub busy: bool,
-    pub started_at: i64,
-    pub last_activity: i64,
-    pub responses: i64,
-    pub cost: f64,
-    pub context_tokens: i64,
-    pub context_limit: Option<i64>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Period {
-    pub sessions: i64,
-    pub responses: i64,
-    pub cost: f64,
-    pub top_model: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct OpencodeUsage {
-    pub installed: bool,
-    pub active: Vec<OpencodeSession>,
-    pub today: Period,
-    pub week: Period,
-    pub error: Option<String>,
 }
 
 /// Limite de contexto por "provedor/modelo", da lista de modelos que o opencode guarda.
@@ -106,26 +66,16 @@ fn parse_response(session_id: String, updated: i64, data: &str) -> Option<Respon
     })
 }
 
-fn period(responses: &[&Response]) -> Period {
-    let mut sessions: Vec<&str> = responses.iter().map(|r| r.session_id.as_str()).collect();
-    sessions.sort_unstable();
-    sessions.dedup();
-    let mut by_model: HashMap<&str, i64> = HashMap::new();
-    for r in responses {
-        if let Some(m) = &r.model {
-            *by_model.entry(m).or_default() += 1;
-        }
-    }
-    Period {
-        sessions: sessions.len() as i64,
-        responses: responses.len() as i64,
-        cost: responses.iter().map(|r| r.cost).sum(),
-        top_model: by_model.into_iter().max_by_key(|(m, n)| (*n, std::cmp::Reverse(*m))).map(|(m, _)| m.to_string()),
-    }
+fn period(responses: &[&Response]) -> crate::agents::Period {
+    let p = crate::agents::period(
+        responses.iter().map(|r| Reply { session_id: &r.session_id, model: r.model.as_deref(), cost: Some(r.cost) }),
+    );
+    // O opencode sempre registra gasto: sem respostas, é US$ 0.
+    crate::agents::Period { cost: Some(p.cost.unwrap_or(0.0)), ..p }
 }
 
 /// `today_start`: meia-noite local de hoje, em ms.
-pub fn read(db: &Path, limits: &HashMap<String, i64>, now: i64, today_start: i64) -> rusqlite::Result<OpencodeUsage> {
+pub fn read(db: &Path, limits: &HashMap<String, i64>, now: i64, today_start: i64) -> rusqlite::Result<AgentUsage> {
     let conn = Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
     let since = (now - 7 * DAY_MS).min(today_start);
 
@@ -172,7 +122,7 @@ pub fn read(db: &Path, limits: &HashMap<String, i64>, now: i64, today_start: i64
     for r in &responses {
         by_session.entry(&r.session_id).or_default().push(r);
     }
-    let mut active: Vec<OpencodeSession> = by_session
+    let mut active: Vec<AgentSession> = by_session
         .into_iter()
         .filter_map(|(id, list)| {
             let last = *list.last()?;
@@ -182,7 +132,7 @@ pub fn read(db: &Path, limits: &HashMap<String, i64>, now: i64, today_start: i64
                 return None;
             }
             let (title, directory, started_at) = sessions.get(id).cloned().unwrap_or_default();
-            Some(OpencodeSession {
+            Some(AgentSession {
                 id: id.to_string(),
                 title,
                 directory,
@@ -191,7 +141,7 @@ pub fn read(db: &Path, limits: &HashMap<String, i64>, now: i64, today_start: i64
                 started_at,
                 last_activity,
                 responses: list.len() as i64,
-                cost: list.iter().map(|r| r.cost).sum(),
+                cost: Some(list.iter().map(|r| r.cost).sum()),
                 context_tokens: last.tokens,
                 context_limit: last.model.as_ref().and_then(|m| limits.get(m).copied()),
             })
@@ -199,27 +149,19 @@ pub fn read(db: &Path, limits: &HashMap<String, i64>, now: i64, today_start: i64
         .collect();
     active.sort_by_key(|s| std::cmp::Reverse(s.last_activity));
 
-    Ok(OpencodeUsage { installed: true, active, today: period(&today), week: period(&week), error: None })
+    Ok(AgentUsage { installed: true, active, today: period(&today), week: period(&week), ..Default::default() })
 }
 
-pub fn usage(home: &Path, now: i64, today_start: i64) -> OpencodeUsage {
+pub fn usage(home: &Path, now: i64, today_start: i64) -> AgentUsage {
     let db = db_path(home);
     if !db.is_file() {
-        return OpencodeUsage {
-            installed: false,
-            active: vec![],
-            today: Period::default(),
-            week: Period::default(),
-            error: None,
-        };
+        return AgentUsage::default();
     }
     let limits = std::fs::read_to_string(models_path(home)).map(|s| context_limits(&s)).unwrap_or_default();
-    read(&db, &limits, now, today_start).unwrap_or_else(|e| OpencodeUsage {
+    read(&db, &limits, now, today_start).unwrap_or_else(|e| AgentUsage {
         installed: true,
-        active: vec![],
-        today: Period::default(),
-        week: Period::default(),
         error: Some(format!("Não foi possível ler o banco do opencode: {e}")),
+        ..Default::default()
     })
 }
 
@@ -277,7 +219,7 @@ mod tests {
         assert_eq!((s.id.as_str(), s.title.as_str()), ("ativa", "Corrige login"));
         assert!(s.busy, "a última resposta ainda não terminou");
         assert_eq!(s.responses, 3, "inclui a resposta do subagente");
-        assert_eq!(s.cost, 0.75);
+        assert_eq!(s.cost, Some(0.75));
         assert_eq!(s.context_tokens, 2000 + 10 + 5 + 100);
         assert_eq!(s.context_limit, Some(10_000));
         assert_eq!(s.model.as_deref(), Some("opencode/free"));
@@ -288,10 +230,10 @@ mod tests {
         let tmp = fixture();
         let u = read(&tmp.path().join("opencode.db"), &HashMap::new(), NOW, TODAY).unwrap();
         assert_eq!((u.today.sessions, u.today.responses), (1, 3));
-        assert_eq!(u.today.cost, 0.75);
+        assert_eq!(u.today.cost, Some(0.75));
         assert_eq!(u.today.top_model.as_deref(), Some("opencode/free"));
         assert_eq!((u.week.sessions, u.week.responses), (2, 5), "a resposta de 9 dias atrás fica de fora");
-        assert_eq!(u.week.cost, 1.75);
+        assert_eq!(u.week.cost, Some(1.75));
     }
 
     #[test]
