@@ -221,3 +221,6 @@ __marimo__/
 
 # Node / Tauri
 node_modules/
+
+# Guia pessoal de desenvolvimento e lançamento (só local)
+explicacao.md
