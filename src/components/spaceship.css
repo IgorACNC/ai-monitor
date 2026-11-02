@@ -1,0 +1,421 @@
+/* ---------- Modo nave: cada sessão é um tripulante ---------- */
+
+.ship {
+  position: relative;
+  container-type: inline-size;
+  aspect-ratio: 900 / 260;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: radial-gradient(ellipse at 70% 40%, #121a33 0%, #070a14 70%);
+}
+
+.ship-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.ship-star {
+  fill: #dfe7ff;
+  animation: ship-twinkle 4s ease-in-out infinite;
+}
+
+@keyframes ship-twinkle {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.ship-hull {
+  fill: #2b3140;
+  stroke: #5c6680;
+  stroke-width: 3;
+}
+
+.ship-fin,
+.ship-engine {
+  fill: #3a4256;
+  stroke: #5c6680;
+  stroke-width: 2;
+}
+
+.ship-inside {
+  fill: #151a24;
+}
+
+.ship-flame {
+  fill: #f59f4c;
+  transform-box: fill-box;
+  transform-origin: right center;
+  animation: ship-flame 0.18s ease-in-out infinite alternate;
+}
+
+.ship-flame-b {
+  animation-delay: 0.09s;
+}
+
+@keyframes ship-flame {
+  to {
+    transform: scaleX(0.7);
+    fill: #ffd27a;
+  }
+}
+
+.ship-window {
+  fill: #070b18;
+}
+
+.ship-window-ring {
+  fill: none;
+  stroke: #6b7590;
+  stroke-width: 3;
+}
+
+.ship-streaks {
+  animation: ship-streaks 1.4s linear infinite;
+}
+
+.ship-streaks-slow {
+  animation-duration: 3s;
+}
+
+@keyframes ship-streaks {
+  from {
+    transform: translateX(30px);
+  }
+  to {
+    transform: translateX(-40px);
+  }
+}
+
+.ship-console {
+  fill: #3a4256;
+}
+
+.ship-screen {
+  fill: #4fd1e8;
+  animation: ship-screen 2.2s steps(2) infinite;
+}
+
+.ship-screen-b {
+  fill: #9ad18b;
+  animation-delay: 0.7s;
+}
+
+@keyframes ship-screen {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.ship-radar {
+  fill: #0d2b22;
+  stroke: #3c8a6c;
+  stroke-width: 2;
+}
+
+.ship-radar-sweep {
+  stroke: #7dffc4;
+  stroke-width: 2;
+  transform-origin: 480px 78px;
+  animation: ship-sweep 3s linear infinite;
+}
+
+@keyframes ship-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ship-seat {
+  fill: #59627a;
+}
+
+.ship-floor {
+  fill: #444c62;
+}
+
+.ship-ladder {
+  fill: #59627a;
+}
+
+.ship-reactor {
+  animation: ship-pulse 2.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes ship-pulse {
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+.ship-pot {
+  fill: #8a5a3c;
+}
+
+.ship-plant {
+  fill: none;
+  stroke: #6fcf7f;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.ship-pad {
+  fill: #4fd1e8;
+  opacity: 0.6;
+}
+
+.ship-crate {
+  fill: #5a5040;
+  stroke: #7b6d55;
+  stroke-width: 1.5;
+}
+
+.ship-empty {
+  position: absolute;
+  inset: auto 0 6% 0;
+  margin: 0;
+  color: #aab3c8;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Tripulantes */
+
+.crew {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transform: translate(-50%, -100%);
+  transition-property: left;
+  transition-timing-function: linear;
+}
+
+.crew-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #0c1120;
+  color: #e6e9f2;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.crew-label .status-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.crew-pct {
+  color: #aab3c8;
+  font-weight: 400;
+}
+
+.crew:hover,
+.crew.selected {
+  z-index: 1;
+}
+
+.crew:hover .crew-label,
+.crew.selected .crew-label {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.crew.selected .crew-pct,
+.crew:hover .crew-pct {
+  color: var(--accent-ink);
+}
+
+.crew:focus-visible {
+  outline: none;
+}
+
+.crew:focus-visible .crew-label {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.crew-figure {
+  display: block;
+  width: clamp(24px, 4.4cqw, 44px);
+}
+
+.astronaut {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.astro-body,
+.astro-helmet,
+.astro-leg rect,
+.astro-arm rect {
+  fill: #eef1f6;
+}
+
+.astro-helmet {
+  stroke: #b9c0cc;
+  stroke-width: 1;
+}
+
+.astro-pack {
+  fill: #c3c9d4;
+}
+
+.astro-light {
+  fill: #4cc27f;
+}
+
+.astro-light.busy {
+  fill: #f59f4c;
+  animation: ship-screen 0.8s steps(2) infinite;
+}
+
+.astro-leg,
+.astro-arm,
+.astro-head {
+  transform-box: fill-box;
+}
+
+.astro-leg {
+  transform-origin: center top;
+}
+
+.astro-arm {
+  transform-origin: center top;
+}
+
+.astro-head {
+  transform-origin: center bottom;
+}
+
+.crew-walking .astronaut {
+  animation: astro-bob 0.5s ease-in-out infinite;
+}
+
+.crew-walking .astro-leg-a {
+  animation: astro-step 0.5s ease-in-out infinite alternate;
+}
+
+.crew-walking .astro-leg-b {
+  animation: astro-step 0.5s ease-in-out infinite alternate-reverse;
+}
+
+.crew-walking .astro-arm {
+  animation: astro-step 0.5s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes astro-bob {
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+@keyframes astro-step {
+  from {
+    transform: rotate(-22deg);
+  }
+  to {
+    transform: rotate(22deg);
+  }
+}
+
+/* No painel: o braço sobe e desce, como se digitasse. */
+.crew-typing .astro-arm {
+  animation: astro-type 0.35s ease-in-out infinite alternate;
+}
+
+@keyframes astro-type {
+  from {
+    transform: rotate(-70deg);
+  }
+  to {
+    transform: rotate(-95deg);
+  }
+}
+
+/* Na janela: olha para os lados devagar. */
+.crew-looking .astro-head {
+  animation: astro-look 3s ease-in-out infinite;
+}
+
+@keyframes astro-look {
+  25% {
+    transform: rotate(-8deg);
+  }
+  75% {
+    transform: rotate(6deg);
+  }
+}
+
+/* Chegada pelo teleporte. */
+.crew-arriving .crew-figure {
+  animation: astro-arrive 1.3s ease-out both;
+}
+
+@keyframes astro-arrive {
+  from {
+    opacity: 0;
+    filter: brightness(3);
+  }
+  60% {
+    opacity: 1;
+    filter: brightness(2);
+  }
+  to {
+    filter: none;
+  }
+}
+
+.crew-beam {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 150%;
+  height: 120%;
+  border-radius: 40% 40% 50% 50%;
+  background: linear-gradient(to top, rgb(79 209 232 / 70%), rgb(79 209 232 / 0%));
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: astro-beam 1.4s ease-out forwards;
+}
+
+@keyframes astro-beam {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ship *,
+  .ship .crew {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Troca "Lista | Modo nave" acima das sessões. */
+.segmented-small {
+  margin-bottom: 12px;
+}
+
+.segmented-small button {
+  padding: 4px 12px;
+  font-size: 12px;
+}

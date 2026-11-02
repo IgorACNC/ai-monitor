@@ -2,6 +2,7 @@ import { useState } from "react";
 import { baseName, compact, elapsed, fmt, severity } from "../format";
 import type { AgentId, AgentPeriod, AgentSession, AgentUsage, Limits } from "../types";
 import { LimitCard } from "./Limits";
+import { ShipToggle, Spaceship, useShipMode } from "./Spaceship";
 
 export const AGENT_NAMES: Record<AgentId, string> = {
   claude: "Claude",
@@ -130,8 +131,8 @@ function PlanLimits({ limits, name, now }: { limits: Limits | null; name: string
         ))}
       </div>
       <p className="section-note">
-        Atualizado {elapsed(limits.capturedAt, now)}, na última resposta do {name}. Uso pelo site ou por outro computador
-        só aparece depois da próxima resposta aqui.
+        Atualizado {elapsed(limits.capturedAt, now)}, na última resposta do {name}. Uso pelo site ou por outro
+        computador só aparece depois da próxima resposta aqui.
       </p>
     </div>
   );
@@ -140,6 +141,7 @@ function PlanLimits({ limits, name, now }: { limits: Limits | null; name: string
 /** Visão geral de opencode, Codex ou Gemini: % do plano (Codex), resumo do uso e sessões ativas. */
 export function AgentView({ agent, usage, now }: { agent: AgentId; usage: AgentUsage | null; now: number }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [ship, setShip] = useShipMode();
   const name = AGENT_NAMES[agent];
 
   if (!usage) return <p className="empty-line">Lendo os dados do {name}…</p>;
@@ -180,10 +182,22 @@ export function AgentView({ agent, usage, now }: { agent: AgentId; usage: AgentU
         <h2 className="section-title">
           Sessões ativas {usage.active.length > 0 && <span className="count">{usage.active.length}</span>}
         </h2>
-        {usage.active.length === 0 ? (
-          <p className="empty-line">Nenhuma sessão do {name} respondeu nos últimos 10 minutos.</p>
-        ) : (
-          <div className="active-sessions">
+        <div className="active-sessions">
+          <ShipToggle ship={ship} onChange={setShip} />
+          {ship ? (
+            <Spaceship
+              crew={usage.active.map((s) => ({
+                id: s.id,
+                name: titleOf(s),
+                busy: s.busy,
+                percent: contextPercent(s),
+              }))}
+              selectedId={openId}
+              onSelect={setOpenId}
+            />
+          ) : usage.active.length === 0 ? (
+            <p className="empty-line">Nenhuma sessão do {name} respondeu nos últimos 10 minutos.</p>
+          ) : (
             <ul className="pills">
               {usage.active.map((s) => {
                 const selected = s.id === openId;
@@ -205,9 +219,9 @@ export function AgentView({ agent, usage, now }: { agent: AgentId; usage: AgentU
                 );
               })}
             </ul>
-            {open && <Detail session={open} now={now} />}
-          </div>
-        )}
+          )}
+          {open && <Detail session={open} now={now} />}
+        </div>
       </section>
     </>
   );
