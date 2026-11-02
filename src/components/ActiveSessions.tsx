@@ -2,6 +2,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { baseName, compact, elapsed, fmt, severity } from "../format";
 import type { LiveSession } from "../types";
+import { ShipToggle, Spaceship, useShipMode } from "./Spaceship";
 
 const STATUS: Record<string, { label: string; className: string }> = {
   busy: { label: "Trabalhando", className: "status-busy" },
@@ -115,42 +116,64 @@ function Detail({ session, now, onEnded }: { session: LiveSession; now: number; 
   );
 }
 
-/** Pílulas com os consoles abertos; clicar numa mostra os detalhes logo abaixo. */
-export function ActiveSessions({ sessions, now, onChanged }: { sessions: LiveSession[]; now: number; onChanged: () => void }) {
+/**
+ * Consoles abertos, em pílulas ou como tripulantes da nave (modo nave); clicar num deles
+ * mostra os detalhes logo abaixo.
+ */
+export function ActiveSessions({
+  sessions,
+  now,
+  onChanged,
+}: {
+  sessions: LiveSession[];
+  now: number;
+  onChanged: () => void;
+}) {
   const [openPid, setOpenPid] = useState<number | null>(null);
+  const [ship, setShip] = useShipMode();
   const open = sessions.find((s) => s.pid === openPid) ?? null;
-
-  if (sessions.length === 0) {
-    return (
-      <p className="empty-line">
-        Nenhum console do Claude Code aberto. Rode <code>claude</code> num terminal e ele aparece aqui.
-      </p>
-    );
-  }
 
   return (
     <div className="active-sessions">
-      <ul className="pills">
-        {sessions.map((s) => {
-          const status = statusOf(s);
-          const selected = s.pid === openPid;
-          return (
-            <li key={s.pid}>
-              <button
-                className={`pill${selected ? " selected" : ""}`}
-                aria-expanded={selected}
-                aria-controls={`session-${s.pid}`}
-                title={`${titleOf(s)}: ${status.label}`}
-                onClick={() => setOpenPid(selected ? null : s.pid)}
-              >
-                <span className={`status-dot ${status.className}`} aria-hidden="true" />
-                <span className="pill-title">{titleOf(s)}</span>
-                {s.context !== null && <span className="pill-meta">{Math.round(s.context.percent)}%</span>}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <ShipToggle ship={ship} onChange={setShip} />
+      {ship ? (
+        <Spaceship
+          crew={sessions.map((s) => ({
+            id: String(s.pid),
+            name: titleOf(s),
+            busy: s.status === "busy",
+            percent: s.context?.percent ?? null,
+          }))}
+          selectedId={openPid === null ? null : String(openPid)}
+          onSelect={(id) => setOpenPid(id === null ? null : Number(id))}
+        />
+      ) : sessions.length === 0 ? (
+        <p className="empty-line">
+          Nenhum console do Claude Code aberto. Rode <code>claude</code> num terminal e ele aparece aqui.
+        </p>
+      ) : (
+        <ul className="pills">
+          {sessions.map((s) => {
+            const status = statusOf(s);
+            const selected = s.pid === openPid;
+            return (
+              <li key={s.pid}>
+                <button
+                  className={`pill${selected ? " selected" : ""}`}
+                  aria-expanded={selected}
+                  aria-controls={`session-${s.pid}`}
+                  title={`${titleOf(s)}: ${status.label}`}
+                  onClick={() => setOpenPid(selected ? null : s.pid)}
+                >
+                  <span className={`status-dot ${status.className}`} aria-hidden="true" />
+                  <span className="pill-title">{titleOf(s)}</span>
+                  {s.context !== null && <span className="pill-meta">{Math.round(s.context.percent)}%</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {open && <Detail session={open} now={now} onEnded={() => (setOpenPid(null), onChanged())} />}
     </div>
   );
