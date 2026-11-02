@@ -21,36 +21,36 @@ type Deck = {
   floor: number;
   minX: number;
   maxX: number;
-  /** Onde os tripulantes novos chegam (teleporte ou escotilha). */
-  spawn: number;
+  /** Duto de ventilação de onde os tripulantes novos saem. */
+  vent: number;
   stations: { x: number; kind: StationKind }[];
 };
 
 const DECKS: Deck[] = [
   {
     floor: 126,
-    minX: 130,
+    minX: 120,
     maxX: 770,
-    spawn: 560,
+    vent: 540,
     stations: [
-      { x: 200, kind: "console" },
+      { x: 175, kind: "console" },
       { x: 300, kind: "window" },
-      { x: 400, kind: "window" },
-      { x: 480, kind: "console" },
-      { x: 660, kind: "console" },
+      { x: 410, kind: "console" },
+      { x: 470, kind: "window" },
+      { x: 650, kind: "console" },
       { x: 760, kind: "window" },
     ],
   },
   {
     floor: 204,
-    minX: 120,
+    minX: 110,
     maxX: 760,
-    spawn: 640,
+    vent: 660,
     stations: [
-      { x: 150, kind: "console" },
-      { x: 320, kind: "console" },
-      { x: 470, kind: "window" },
-      { x: 560, kind: "console" },
+      { x: 190, kind: "console" },
+      { x: 330, kind: "console" },
+      { x: 520, kind: "window" },
+      { x: 735, kind: "window" },
     ],
   },
 ];
@@ -169,7 +169,7 @@ function Crew({
   // Parado (animação reduzida): cada um fica no seu posto.
   const home = deck.stations[(h >>> 7) % deck.stations.length];
 
-  const [x, setX] = useState(still ? home.x : deck.spawn);
+  const [x, setX] = useState(still ? home.x : deck.vent);
   const [dur, setDur] = useState(0);
   const [facing, setFacing] = useState<1 | -1>(1);
   const [phase, setPhase] = useState<"arriving" | "walking" | "typing" | "looking">(still ? "typing" : "arriving");
@@ -194,7 +194,7 @@ function Crew({
         timer = window.setTimeout(walk, stay);
       }, seconds * 1000);
     };
-    // Primeiro o teleporte, depois começa a andar.
+    // Primeiro o feixe de chegada, depois começa a andar.
     timer = window.setTimeout(walk, 1400);
     return () => {
       window.clearTimeout(timer);
@@ -235,112 +235,196 @@ const STARS = Array.from({ length: 70 }, (_, i) => {
   return { x: h % W, y: (h >>> 10) % H, r: 0.6 + ((h >>> 20) % 10) / 10, delay: ((h >>> 5) % 40) / 10 };
 });
 
+/** Duto de ventilação no piso. */
+function Vent({ x, floor }: { x: number; floor: number }) {
+  return (
+    <g className="ship-vent">
+      <rect x={x - 17} y={floor - 3} width="34" height="6" rx="1.5" />
+      {[-11, -5, 1, 7].map((dx) => (
+        <rect key={dx} className="ship-vent-slat" x={x + dx} y={floor - 2} width="3" height="4" />
+      ))}
+    </g>
+  );
+}
+
+function Porthole({ id, cx, cy }: { id: string; cx: number; cy: number }) {
+  return (
+    <g>
+      <circle className="ship-window" cx={cx} cy={cy} r="15" />
+      <g clipPath={`url(#${id})`}>
+        <g className="ship-streaks">
+          {[0, 1, 2, 3].map((k) => (
+            <rect key={k} x={cx - 30 + k * 18} y={cy - 12 + ((k * 7) % 22)} width="7" height="1.4" fill="#cfe3ff" />
+          ))}
+        </g>
+      </g>
+      <circle className="ship-ring" cx={cx} cy={cy} r="15" />
+    </g>
+  );
+}
+
 function Hull() {
+  const portholes: [string, number, number][] = [
+    ["ship-ph-a", 300, 80],
+    ["ship-ph-b", 470, 80],
+  ];
   return (
     <svg className="ship-art" viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
       <defs>
-        <clipPath id="ship-porthole-a">
-          <circle cx="300" cy="78" r="17" />
-        </clipPath>
-        <clipPath id="ship-porthole-b">
-          <circle cx="400" cy="78" r="17" />
-        </clipPath>
+        {portholes.map(([id, cx, cy]) => (
+          <clipPath key={id} id={id}>
+            <circle cx={cx} cy={cy} r="15" />
+          </clipPath>
+        ))}
         <clipPath id="ship-cockpit">
-          <path d="M 735 62 Q 830 66 852 124 L 735 124 Z" />
+          <path d="M 735 60 Q 832 64 852 124 L 735 124 Z" />
         </clipPath>
-        <radialGradient id="ship-reactor">
-          <stop offset="0" stopColor="#bff6ff" />
-          <stop offset="0.5" stopColor="#4fd1e8" />
-          <stop offset="1" stopColor="#4fd1e8" stopOpacity="0" />
-        </radialGradient>
+        <linearGradient id="ship-core" x1="0" x2="1">
+          <stop offset="0" stopColor="#2aa7d8" />
+          <stop offset="0.5" stopColor="#b8f3ff" />
+          <stop offset="1" stopColor="#2aa7d8" />
+        </linearGradient>
+        <pattern id="ship-hazard" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="12" height="12" fill="#f2c230" />
+          <rect width="6" height="12" fill="#1b1d24" />
+        </pattern>
+        <pattern id="ship-tiles" width="20" height="8" patternUnits="userSpaceOnUse">
+          <rect width="20" height="8" fill="#8e97ad" />
+          <rect width="1.5" height="8" fill="#6d7690" />
+        </pattern>
       </defs>
 
       {STARS.map((s, i) => (
         <circle key={i} className="ship-star" cx={s.x} cy={s.y} r={s.r} style={{ animationDelay: `${s.delay}s` }} />
       ))}
 
-      {/* Motores */}
-      <path className="ship-flame" d="M 52 82 Q 10 92 52 104 Z" />
-      <path className="ship-flame ship-flame-b" d="M 52 160 Q 4 172 52 184 Z" />
-      <rect className="ship-engine" x="40" y="76" width="18" height="34" rx="4" />
-      <rect className="ship-engine" x="40" y="154" width="18" height="34" rx="4" />
-
-      {/* Casco */}
-      <path
-        className="ship-hull"
-        d="M 72 38 L 700 38 Q 872 42 884 132 Q 872 222 700 226 L 72 226 Q 52 226 52 206 L 52 58 Q 52 38 72 38 Z"
-      />
-      <path className="ship-fin" d="M 180 38 L 240 8 L 330 8 L 300 38 Z" />
-      <path className="ship-fin" d="M 180 226 L 240 252 L 330 252 L 300 226 Z" />
-      <path className="ship-inside" d="M 82 50 L 700 50 Q 856 56 866 132 Q 856 208 700 214 L 82 214 Z" />
-
-      {/* Janelas com estrelas passando */}
-      {[
-        ["ship-porthole-a", 300],
-        ["ship-porthole-b", 400],
-      ].map(([clip, cx]) => (
-        <g key={clip}>
-          <circle className="ship-window" cx={cx} cy="78" r="17" />
-          <g clipPath={`url(#${clip})`}>
-            <g className="ship-streaks">
-              {[0, 1, 2, 3].map((k) => (
-                <rect
-                  key={k}
-                  x={Number(cx) - 30 + k * 18}
-                  y={66 + ((k * 7) % 22)}
-                  width="7"
-                  height="1.4"
-                  fill="#cfe3ff"
-                />
-              ))}
-            </g>
-          </g>
-          <circle className="ship-window-ring" cx={cx} cy="78" r="17" />
+      {/* Motores redondos atrás, com chama */}
+      {[92, 172].map((cy, i) => (
+        <g key={cy}>
+          <path className={`ship-flame${i ? " ship-flame-b" : ""}`} d={`M 22 ${cy - 13} Q -18 ${cy} 22 ${cy + 13} Z`} />
+          <rect className="ship-line" x="18" y={cy - 22} width="44" height="44" rx="14" fill="#a3acbf" />
+          <rect x="18" y={cy - 22} width="10" height="44" rx="5" fill="#6d7690" />
         </g>
       ))}
-      <path className="ship-window" d="M 735 62 Q 830 66 852 124 L 735 124 Z" />
+
+      {/* Casco */}
+      <path className="ship-fin ship-line" d="M 190 40 L 250 10 L 340 10 L 315 40 Z" />
+      <path className="ship-fin ship-line" d="M 190 224 L 250 252 L 340 252 L 315 224 Z" />
+      <path
+        className="ship-hull ship-line"
+        d="M 72 38 L 700 38 Q 874 42 886 132 Q 874 222 700 226 L 72 226 Q 52 226 52 206 L 52 58 Q 52 38 72 38 Z"
+      />
+      {[110, 610, 840].map((x) => (
+        <circle key={x} cx={x} cy="44" r="1.8" fill="#5d6680" />
+      ))}
+
+      {/* Salas: paredes de cada uma */}
+      <path className="ship-line" fill="#3b4459" d="M 82 50 L 262 50 L 262 126 L 82 126 Z" />
+      <path className="ship-line" fill="#56607a" d="M 262 50 L 560 50 L 560 126 L 262 126 Z" />
+      <path className="ship-line" fill="#3a4a63" d="M 560 50 L 700 50 Q 856 56 866 126 L 560 126 Z" />
+      <path className="ship-line" fill="#30405e" d="M 82 132 L 262 132 L 262 206 L 82 206 Z" />
+      <path className="ship-line" fill="#4a4637" d="M 262 132 L 430 132 L 430 206 L 262 206 Z" />
+      <path className="ship-line" fill="#2f5446" d="M 430 132 L 610 132 L 610 206 L 430 206 Z" />
+      <path className="ship-line" fill="#4a4152" d="M 610 132 L 790 132 Q 820 170 790 206 L 610 206 Z" />
+      {/* Portas entre as salas (vão aberto embaixo) */}
+      {[
+        [262, 50],
+        [560, 50],
+        [262, 132],
+        [430, 132],
+        [610, 132],
+      ].map(([x, y]) => (
+        <rect key={`${x}-${y}`} x={x - 5} y={y} width="10" height="20" fill="#1b1d24" />
+      ))}
+
+      {/* Comunicação: radar e painel */}
+      <circle className="ship-radar ship-line" cx="212" cy="80" r="17" />
+      <line className="ship-radar-sweep" x1="212" y1="80" x2="212" y2="64" />
+      <rect className="ship-line" x="150" y="102" width="50" height="24" rx="4" fill="#c7ccd6" />
+      <rect className="ship-screen" x="156" y="106" width="22" height="9" rx="2" />
+      <rect className="ship-screen ship-screen-b" x="181" y="106" width="13" height="9" rx="2" />
+
+      {/* Refeitório: janelas e a mesa com o botão vermelho de emergência */}
+      {portholes.map(([id, cx, cy]) => (
+        <Porthole key={id} id={id} cx={cx} cy={cy} />
+      ))}
+      <rect className="ship-line" x="404" y="111" width="12" height="15" fill="#9aa3b6" />
+      <rect className="ship-line" x="366" y="104" width="88" height="9" rx="4.5" fill="#d9dde6" />
+      <path className="ship-line" d="M 402 104 Q 402 92 410 92 Q 418 92 418 104 Z" fill="#e0262f" />
+      <path
+        d="M 405 100 Q 406 95 410 94.5"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        opacity="0.8"
+      />
+
+      {/* Navegação: painel, assento e a cabine */}
+      <rect className="ship-line" x="622" y="98" width="62" height="28" rx="4" fill="#c7ccd6" />
+      <rect className="ship-screen" x="628" y="103" width="22" height="10" rx="2" />
+      <rect className="ship-screen ship-screen-b" x="655" y="103" width="23" height="10" rx="2" />
+      <path className="ship-window" d="M 735 60 Q 832 64 852 124 L 735 124 Z" />
       <g clipPath="url(#ship-cockpit)">
         <g className="ship-streaks ship-streaks-slow">
           {[0, 1, 2, 3, 4, 5].map((k) => (
-            <rect key={k} x={700 + k * 30} y={72 + ((k * 13) % 44)} width="12" height="1.6" fill="#cfe3ff" />
+            <rect key={k} x={700 + k * 30} y={70 + ((k * 13) % 44)} width="12" height="1.6" fill="#cfe3ff" />
           ))}
         </g>
-        <circle cx="815" cy="88" r="9" fill="#e9a36b" />
+        <circle cx="815" cy="86" r="10" fill="#e9a36b" />
+        <circle cx="811" cy="83" r="3" fill="#c97f4c" />
       </g>
-      <path className="ship-window-ring" d="M 735 62 Q 830 66 852 124 L 735 124 Z" fill="none" />
+      <path className="ship-ring" d="M 735 60 Q 832 64 852 124 L 735 124 Z" fill="none" />
+      <rect className="ship-line" x="740" y="100" width="13" height="26" rx="4" fill="#d6262c" />
 
-      {/* Andar de cima: mapa, radar, painel principal, assento do piloto */}
-      <rect className="ship-console" x="180" y="100" width="40" height="26" rx="3" />
-      <rect className="ship-screen" x="185" y="104" width="30" height="9" rx="2" />
-      <circle className="ship-radar" cx="480" cy="78" r="18" />
-      <line className="ship-radar-sweep" x1="480" y1="78" x2="480" y2="61" />
-      <rect className="ship-console" x="630" y="98" width="60" height="28" rx="3" />
-      <rect className="ship-screen" x="636" y="102" width="20" height="10" rx="2" />
-      <rect className="ship-screen ship-screen-b" x="662" y="102" width="22" height="10" rx="2" />
-      <rect className="ship-seat" x="742" y="100" width="12" height="26" rx="3" />
+      {/* Piso de cima */}
+      <rect className="ship-line" x="82" y="126" width="784" height="8" fill="url(#ship-tiles)" />
 
-      {/* Piso de cima e escada */}
-      <rect className="ship-floor" x="82" y="126" width="784" height="6" />
-      {[140, 156, 172, 188].map((y) => (
-        <rect key={y} className="ship-ladder" x="540" y={y} width="30" height="2" />
+      {/* Reator: núcleo pulsando */}
+      <rect className="ship-line" x="132" y="198" width="66" height="8" rx="2" fill="#9aa3b6" />
+      <rect className="ship-reactor ship-line" x="149" y="140" width="32" height="58" rx="16" fill="url(#ship-core)" />
+      <rect className="ship-line" x="206" y="176" width="34" height="30" rx="4" fill="#c7ccd6" />
+      <rect className="ship-screen" x="211" y="181" width="24" height="8" rx="2" />
+
+      {/* Elétrica: quadro com faixas de perigo e interruptores */}
+      <rect className="ship-line" x="300" y="146" width="62" height="44" rx="3" fill="#7d838f" />
+      <rect x="300" y="180" width="62" height="10" fill="url(#ship-hazard)" />
+      {[310, 324, 338, 352].map((x, i) => (
+        <rect
+          key={x}
+          className={i % 2 ? "ship-switch ship-switch-b" : "ship-switch"}
+          x={x - 3}
+          y="154"
+          width="6"
+          height="14"
+          rx="2"
+        />
       ))}
-      <rect className="ship-ladder" x="538" y="132" width="3" height="72" />
-      <rect className="ship-ladder" x="569" y="132" width="3" height="72" />
+      <path d="M 300 160 Q 280 170 284 206" fill="none" stroke="#f2c230" strokeWidth="2" />
+      <path d="M 362 166 Q 384 176 380 206" fill="none" stroke="#e0262f" strokeWidth="2" />
 
-      {/* Andar de baixo: reator, laboratório, plantas, teleporte, caixas */}
-      <circle className="ship-reactor" cx="150" cy="168" r="26" fill="url(#ship-reactor)" />
-      <rect className="ship-console" x="130" y="186" width="40" height="18" rx="3" />
-      <rect className="ship-console" x="300" y="180" width="44" height="24" rx="3" />
-      <rect className="ship-screen" x="306" y="184" width="32" height="8" rx="2" />
-      <rect className="ship-pot" x="458" y="190" width="24" height="14" rx="2" />
-      <path
-        className="ship-plant"
-        d="M 470 190 Q 452 170 462 160 M 470 190 Q 470 160 470 152 M 470 190 Q 490 172 480 160"
-      />
-      <ellipse className="ship-pad" cx="640" cy="203" rx="26" ry="5" />
-      <rect className="ship-crate" x="720" y="182" width="24" height="22" rx="2" />
-      <rect className="ship-crate" x="746" y="190" width="18" height="14" rx="2" />
-      <rect className="ship-floor" x="82" y="204" width="700" height="6" />
+      {/* O2: plantas */}
+      {[492, 548].map((x) => (
+        <g key={x}>
+          <rect className="ship-line" x={x - 13} y="190" width="26" height="16" rx="3" fill="#c7ccd6" />
+          <path
+            className="ship-plant"
+            d={`M ${x} 190 Q ${x - 18} 172 ${x - 8} 160 M ${x} 190 Q ${x} 162 ${x} 152 M ${x} 190 Q ${x + 18} 174 ${x + 9} 162`}
+          />
+        </g>
+      ))}
+
+      {/* Armazém: caixas */}
+      <rect className="ship-line" x="712" y="182" width="26" height="24" rx="2" fill="#a07a4a" />
+      <rect className="ship-line" x="740" y="190" width="20" height="16" rx="2" fill="#8a6640" />
+      <rect className="ship-line" x="720" y="164" width="18" height="18" rx="2" fill="#b58c58" />
+
+      {/* Piso de baixo */}
+      <rect className="ship-line" x="82" y="204" width="708" height="8" fill="url(#ship-tiles)" />
+
+      {DECKS.map((d) => (
+        <Vent key={d.floor} x={d.vent} floor={d.floor} />
+      ))}
     </svg>
   );
 }
