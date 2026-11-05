@@ -16,7 +16,7 @@ servidor.
 - **GitHub**: seu gráfico de contribuições, seus commits e os pull requests que esperam você. Dá para aprovar,
   pedir mudanças, fazer merge e pedir para o Claude (ou o opencode) analisar um PR.
 - **Modo nave**: troque a lista de sessões por uma nave espacial em que cada terminal aberto é um astronauta andando
-  pelos andares, digitando nos painéis ou olhando pela janela. Terminal novo chega pelo teleporte; clicar num
+  pelos andares, digitando nos painéis ou olhando pela janela. Terminal novo chega num feixe de luz; clicar num
   astronauta mostra os detalhes da sessão.
 - **Barrinha de uso** (opcional): uma barra pequena no canto da tela com as porcentagens quando o app está minimizado.
 - **Um bichinho** na barra de cima que corre atrás da bolinha. Dá para trocar por qualquer GIF.
